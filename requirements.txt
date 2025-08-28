@@ -2,4 +2,5 @@ streamlit
 pandas
 python-docx
 streamlit-quill
-xlsxwriter 
+xlsxwriter
+openpyxl
