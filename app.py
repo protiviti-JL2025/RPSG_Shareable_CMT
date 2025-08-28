@@ -557,6 +557,14 @@ def default_annexure_template() -> BytesIO:
     out.seek(0)
     return out
 
+def default_purchase_annexure_template() -> BytesIO:
+    """Return a blank Excel template for Annexure."""
+    df = pd.read_excel("Purchase Agreement Annexure Fromat Excel.xlsx")
+    out = BytesIO()
+    with pd.ExcelWriter(out, engine="xlsxwriter") as writer:
+        df.to_excel(writer, index=False, sheet_name="Annexure")
+    out.seek(0)
+    return out
 # ------------------------------------------------
 # 3) STREAMLIT APP
 # ------------------------------------------------
@@ -799,32 +807,32 @@ elif st.session_state.workflow == "annexure":
     st.subheader("Annexure (Excel)")
     st.caption("Upload an Excel annexure (pricing, scope, deliverables) or download a blank template.")
 
-    left, right = st.columns([1, 1])
 
-    with left:
-        file = st.file_uploader("Upload Annexure (.xlsx)", type=["xlsx"], key="annexure_uploader")
-        if file:
-            st.session_state.annexure_file = file
-            if not st.session_state.get("annexure_note"):
-                st.session_state.annexure_note = f"Annexure attached: {file.name}"
-            st.success(f"Uploaded: {file.name}")
+    file = st.file_uploader("Upload Annexure (.xlsx)", type=["xlsx"], key="annexure_uploader")
+    if file:
+        st.session_state.annexure_file = file
+        if not st.session_state.get("annexure_note"):
+            st.session_state.annexure_note = f"Annexure attached: {file.name}"
+        st.success(f"Uploaded: {file.name}")
 
-        c1, c2 = st.columns(2)
-        if c1.button("Clear Upload", key="annexure_clear_btn"):
-            st.session_state.annexure_file = None
-            st.info("Annexure upload cleared.")
-        no_annexure = c2.checkbox("No annexure for this contract", value=False, key="no_annexure_chk")
+    c1, c2 = st.columns(2)
+    if c1.button("Clear Upload", key="annexure_clear_btn"):
+        st.session_state.annexure_file = None
+        st.info("Annexure upload cleared.")
+    no_annexure = c2.checkbox("No annexure for this contract", value=False, key="no_annexure_chk")
 
-    with right:
+    if contract_type == "PURCHASE AGREEMENT":
+        template = default_purchase_annexure_template()
+    else: 
         template = default_annexure_template()
-        st.download_button(
-            label="Download Blank Annexure Template (.xlsx)",
-            data=template,
-            file_name="Annexure_Template.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True,
-            key="annexure_template_dl"
-        )
+    st.download_button(
+        label="Download Blank Annexure Template (.xlsx)",
+        data=template,
+        file_name="Annexure_Template.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True,
+        key="annexure_template_dl"
+    )
 
     st.text_area(
         "Annexure Note (appears in contract)",
