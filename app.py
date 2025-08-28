@@ -559,7 +559,7 @@ def default_annexure_template() -> BytesIO:
 
 def default_purchase_annexure_template() -> BytesIO:
     """Return a blank Excel template for Annexure."""
-    df = pd.read_excel("Purchase Agreement Annexure Fromat Excel.xlsx")
+    df = pd.read_excel("Purchase_Agreement_Annexure_Fromat_Excel.xlsx")
     out = BytesIO()
     with pd.ExcelWriter(out, engine="xlsxwriter") as writer:
         df.to_excel(writer, index=False, sheet_name="Annexure")
@@ -807,7 +807,6 @@ elif st.session_state.workflow == "annexure":
     st.subheader("Annexure (Excel)")
     st.caption("Upload an Excel annexure (pricing, scope, deliverables) or download a blank template.")
 
-
     file = st.file_uploader("Upload Annexure (.xlsx)", type=["xlsx"], key="annexure_uploader")
     if file:
         st.session_state.annexure_file = file
@@ -816,6 +815,7 @@ elif st.session_state.workflow == "annexure":
         st.success(f"Uploaded: {file.name}")
 
     c1, c2 = st.columns(2)
+    
     if c1.button("Clear Upload", key="annexure_clear_btn"):
         st.session_state.annexure_file = None
         st.info("Annexure upload cleared.")
