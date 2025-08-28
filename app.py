@@ -6,6 +6,7 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 import pandas as pd
 from datetime import datetime
 from streamlit_quill import st_quill
+import openpyxl
 
 
 # =========================
@@ -815,7 +816,7 @@ elif st.session_state.workflow == "annexure":
         st.success(f"Uploaded: {file.name}")
 
     c1, c2 = st.columns(2)
-    
+
     if c1.button("Clear Upload", key="annexure_clear_btn"):
         st.session_state.annexure_file = None
         st.info("Annexure upload cleared.")
