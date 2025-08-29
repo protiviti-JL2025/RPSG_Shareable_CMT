@@ -819,7 +819,7 @@ elif st.session_state.workflow == "annexure":
         if st.session_state.annexure_file:
             raw_df = pd.read_excel(st.session_state.annexure_file)
         else:
-            raw_df = pd.read_excel(r"C:\Users\subhanjan.nandy\Downloads\Annexure Fromat Excel.xlsx")
+            raw_df = pd.read_excel(r"Purchase_Agreement_Annexure_Fromat_Excel.xlsx")
 
         display_df = df_for_display(raw_df)
         edited_df = st.data_editor(
