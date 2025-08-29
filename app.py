@@ -7,12 +7,12 @@ import pandas as pd
 from datetime import datetime
 from streamlit_quill import st_quill
 import openpyxl
-
+import re  # <-- for stripping HTML before writing to .docx
 
 # =========================
-# CLAUSES (1..22) CONTENT
+# CLAUSES LIBRARIES
 # =========================
-CLAUSES = {
+CLAUSES_NDA = {
     1: """1. In this Agreement except where the context otherwise requires:
 
 (a) In this Agreement the terms listed below shall have the following meanings:
@@ -82,6 +82,175 @@ Any notice, request or instruction: (i) sent by email, shall be deemed received 
     22: """22. Amendment. This Agreement constitutes the sole understanding of the Parties about this subject matter and may not be amended or modified except in writing signed by each of the Parties to the Agreement."""
 }
 
+# 21 CLAUSES for PURCHASE AGREEMENT (grouped exactly as your draft)
+CLAUSES_PA = {
+    1: """1. DEFINITIONS:
+
+In this AGREEMENT, the following expressions shall have, where the context so admits, the meanings assigned thereto.
+
+(a) "AGREEMENT" shall mean this document together with appendices hereto if any, and shall include any modifications and alterations hereto made in writing.
+(b) "Effective Date" shall mean the date on which the authorised representatives of the parties have duly executed this AGREEMENT.
+(c) "Licenses" shall mean clearances, licenses, registrations, nominations and permits required under Food Safety and Standards Act 2006, Food Safety and (Standards Packaging and Labelling) Regulations 2011, Legal Metrology Act 2009 and Legal Metrology (Packaging Commodity) Rules 2011 as on today and/or amended from time to time and/or any other law required to run the business of sale of the food articles.
+(d) "Products" shall mean and refer to all type of articles manufactured, processed, supplied, distributed and marketed by the Supplier that had been mutually agreed herein or shall be determined by the Company at a future date, to be supplied at the retail outlets of the Company or at any other place that the Company may demarcate from time to time.
+(e) "Parties" shall mean the Company or ___________________ together and party shall mean either Spencer’s Retail Limited or _______________, as the case may be.
+(f) "Stores" will mean and include all such Spencer’s stores which are in operation or which may be opened during the Term of this Agreement.""",
+    2: """2. SCOPE OF WORK
+
+2.1 The Company shall periodically place purchase orders for the products and the Supplier shall deliver the same to the Company in such manner and at such place as required/intimated by the Company from time to time.
+
+2.2 The Company shall inform the Supplier of the specifications of the products and may ask for the samples prior to such supply and the Supplier shall supply the products strictly as per the specifications as shall be prescribed by the Company.
+
+2.3 The Supplier shall ensure that the products are neatly and cleanly packed in such manner and quantity as required by the Company before supply.
+
+The Supplier shall ensure that each and every package containing the materials/products shall contain the following in the main display panel: (i) identity of the commodity; (ii) accurate number of the commodity contained; (iv) Maximum Retail Price; (v) name and address of the manufacturer; (vi) date when packed and serial number; (vii) contact details in case of consumer dispute; (viii) Veg/Non-Veg logo; (ix) List of ingredients; (x) Nutritional Panel; (xi) Batch number.
+
+In the event of any action being brought against the Company or any penalties being imposed on the Company for failure on the part of the Supplier to conform to applicable laws and regulations:
+(a) the Supplier shall indemnify the Company for any loss or damage incurred by the Company as a result of the action or penalty imposed;
+(b) the Supplier shall indemnify the Company for all costs, expenses and damages incurred by the Company in any and all proceedings, civil or criminal, that may be brought against the Company for failure to conform to the Packaging Rules;
+(c) the Company shall have the option of terminating this Agreement within 10 days of knowledge of the action being brought against the Company, provided such breach on part of the Supplier had not been addressed and/or steps initiated for rectification.
+
+2.4 The Company shall provide the Supplier with the schedule of its requirement sufficiently in advance to enable planning. However, the schedule will be tentative. Supplier shall be ready to comply within the time prescribed by the Company, not exceeding 14 (Fourteen) days from receipt of the purchase/supply request.
+
+2.5 The Supplier shall at all times supply the products to the Company in the exact quantity and manner at the place confirmed by the Company.
+
+2.6 The Supplier shall maintain a system of ‘traceability’.
+
+2.7 Order Cancellation
+(a) Any time before scheduled commencement of manufacturing of the products as mentioned in the PO, the Company may cancel the order. No compensation will be paid.
+(b) Company may reject and refuse to pay for Products which (i) are not manufactured/packed as per specifications; (ii) are damaged upon receipt; (iii) are not in compliance with this Agreement.
+
+2.8 RISK IN TRANSIT: Manufacturer shall be solely responsible for all risk and damages during transit until received by the Company or its designee. Any transit/freight claims shall be handled by the Manufacturer.""",
+    3: """3. PRINCIPAL TO PRINCIPAL BASIS
+
+This AGREEMENT is on a Principal to Principal basis.
+
+a. COMPANY shall not be responsible for any acts/omissions of VENDOR’s personnel working under VENDOR’s supervision.
+b. COMPANY and VENDOR are independent parties; nothing herein creates JV, partnership, agency, consultancy or employment.""",
+    4: """4. PRICE & PAYMENT
+
+4.1 Prices as per annexure; any change to be intimated at least 30 days in advance.
+
+4.2 Price payable = invoice price minus margin/discounts offered by Supplier; inclusive of all taxes, duties, cess and deliveries, borne by Supplier.
+
+4.3 Payment within period specified in Annexure from receipt of goods, unless defects/damages/pilferages/complaints/claims arise within that period.""",
+    5: """5. RIGHTS AND DUTIES OF THE SUPPLIER
+
+5.1 Diligently carry out the work; improve quality, reduce cost, improve productivity.
+5.2 Carry out supply strictly as per statutory provisions and Company checks.
+5.3 Inform Company immediately of any quality problem.
+5.4 Ensure products and packaging conform to Legal Metrology and FSSAI, etc.
+5.5 Ensure no stoppage/delay from accepted schedule.
+5.6 Supply FOR DC or FOR retail outlet as per PO terms.
+5.7 If unable to adhere to schedule, inform Company; Company may source outside and debit loss/additional cost (excluding force majeure).
+5.8 Supplier responsible for GST/levies, etc.
+5.9 Obtain and comply with all sanctions/licenses; indemnify Company for non-compliance.
+5.10 No child labour in manufacturing/packaging/distribution.""",
+    6: """6. CONSIDERATION
+
+6.1 Supplier has agreed to pay/allow consideration and credit terms as in annexure.""",
+    7: """7. RETURN POLICY
+
+7.1 Company may return non-compliant products within 30 days of receipt; transport cost to Supplier’s account.
+7.2 For any consumer quality complaint, Supplier shall replace free of cost and indemnify Company for losses/costs arising therefrom.
+7.3 Supplier shall take back unsold non-moving stock from the point of delivery.""",
+    8: """8. DAMAGE POLICY
+
+8.1 Supplier shall replace expired product if supplied to Company; no liability for mishandling/improper storage at Company premises.
+8.2 Supplier will replace all expired/damaged products as per actual. Both parties will work jointly to reduce expiry/damage.""",
+    9: """9. PROMOTION PLAN
+
+9.1 Supplier will provide a quarterly promo calendar, with at least one promotion every month per outlet; special promotions during festivals/regions.
+9.2 Supplier will offer consumer promotions for each new outlet for a mutually decided period.""",
+    10: """10. RIGHTS AND DUTIES OF THE COMPANY
+
+10.1 Provide specifications/formulations/designs sufficiently in advance.
+10.2 Supply schedules and POs to be precise; modifications with Supplier’s consent.
+10.3 Pay price as mutually agreed.
+10.4 Provide cooperation to improve performance.
+10.5 Entitled to reject products not complying with standards; Supplier to replace within 7 days of intimation.
+10.6 Supplier to take back rejected stocks within 15 days; during this period Company holds at Supplier’s cost/risk; thereafter costs debited to Supplier.
+10.7 Company to share necessary information to enable Supplier’s performance.
+10.8 Company may terminate with 4 weeks’ notice; immediate termination for inefficiency/non-compliance/misappropriation, etc.""",
+    11: """11. COMPLIANCE OF LEGISLATION
+
+11.1 Supplier shall comply with all applicable laws (FSSAI, Legal Metrology, Labour, PF, ESI, etc.).
+11.2 Supplier shall obtain all necessary licenses/permissions at its cost.
+11.3 All persons engaged by Supplier are Supplier’s employees; Supplier to comply with labour statutes and ensure no employment claim against Company; includes personnel deputed in stores for promotion.""",
+    12: """12. WARRANTY
+
+12.1 Supplier ensures quality manufacturing/packaging under strict checks; complies with applicable law.
+12.2 Supplier shall replace products if any quality/manufacturing defect found; provide warranty as per applicable law.
+12.3 Supplier shall give proper invoice and warrants that:
+(a) duly organized and validly existing;
+(b) has power/authority to execute and perform;
+(c) corporate actions obtained;
+(d) financial capacity;
+(e) Agreement is legal/valid/binding;
+(f) no conflict with charter/documents/law/agreements;
+(g) no actions/proceedings with material adverse effect;
+(h) no violations/defaults with material adverse effect; complied with law; no significant liabilities;
+(i) representations do not omit material facts;
+(j) accepts risk of inadequacy/mistake; Company not liable;
+(k) Products are genuine, defect-free, with manufacturer warranty (if any), and meet PO/sample specs.""",
+    13: """13. CONFIDENTIALITY
+
+13.1 Parties agree all information obtained under this agreement is confidential and will not be used/shared for any other purpose.
+13.2 Logos/trademarks/designs not to be used except as envisaged herein or with prior written consent.
+13.3 Supplier shall not assign any part of this agreement without Company’s consent; breach enables immediate termination and damages.""",
+    14: """14. INDEMNITY
+
+14.1 Supplier shall indemnify Company against all losses/claims/damages/costs arising from acts/omissions/negligence/breach.
+14.2 Supplier specifically indemnifies against claims/fines/penalties arising out of manufacturing defects and/or non-compliance of food laws.
+14.3 Supplier shall bear fines/legal fees if required by Company.
+14.4 On receipt of any legal notice etc., Company may defend/settle at Supplier’s cost.
+14.5 Supplier shall assist in defending; compromise/settlement with mutual agreement.""",
+    15: """15. FORCE MAJEURE
+
+15.1 Failure/delay due solely to Force Majeure (act of God, government, riots, war, strikes, lockouts, transport accidents, etc.) shall not be breach, provided the affected party did not cause it, used diligence to avoid/ameliorate, and continues efforts to comply.
+15.2 Party suffering Force Majeure shall notify within 7 days and use best efforts to remove/remedy.
+15.3 If Force Majeure persists for more than three consecutive months, other party may terminate without liability.""",
+    16: """16. TERM AND TERMINATION
+
+16.1 Unless terminated, term is 5 (Five) years from signing.
+16.2 Company may terminate without cause by 30 days’ notice.
+16.3 Either party may terminate by one month’s notice without reason.
+
+If Supplier cannot provide materials/products within required timeframe, Company may terminate forthwith; Supplier liable for damages due to non-compliance/breach.
+
+Additional grounds for Company’s immediate termination include:
+a. Supplier’s failure to perform (save Force Majeure or Company’s sole fault);
+b. arrears/unpaid amounts due to Company;
+c. false/misleading representations/warranties;
+d. illegal/prohibited activities by Supplier or its employees;
+e. bankruptcy/insolvency of Supplier;
+f. resolution for voluntary winding up;
+g. repeated customer grievances on quality;
+h. failure to deliver within time;
+i. breach of statutory regulations/gross negligence;
+j. delivery not matching request, short/excess supply;
+k. failure to receive back products despite intimation or after display period.
+
+Additionally, immediate termination if Supplier fails in: (i) Quality; (ii) Service; (iii) Marketing Activities; (iv) Delay in Delivery; (v) Non-acceptance of defective/damaged materials.
+
+After notice period expiry, parties will reconcile accounts within 15 days.""",
+    17: """17. QUALITY POLICY
+
+17.1 Supplier shall adhere to standards under Food Laws or other rules; ensure product safety and quality.
+17.2 If entire batch is defective, Company may remove from display immediately; cost of goods/logistics debited to Supplier. Supplier to respond within a week with counter-measures, redress complaint and reconcile with aggrieved customer.""",
+    18: """18. NOTICES
+
+Any notice/letter required shall be deemed properly served if delivered by RPAD/courier/hand at the addresses mentioned hereinabove.""",
+    19: """19. AMENDMENTS & MODIFICATIONS
+
+Any amendment/modification may be initiated by letter from either party; becomes binding when acknowledged/accepted by the other party.""",
+    20: """20. INTELLECTUAL PROPERTY RIGHTS
+
+No party shall use the trademark/copyright/IP of the other in any unauthorized manner or in any advertisement/publicity without written permission of the owner.""",
+    21: """21. JURISDICTION
+
+The courts of Kolkata shall have jurisdiction over disputes arising out of this agreement."""
+}
+
 # ------------------------------------------------
 # 1) TEMPLATES
 # ------------------------------------------------
@@ -106,7 +275,6 @@ The Parties desires to protect its rights and the confidentiality of the Informa
 NOW THEREFORE it is agreed as follows:
 """
 
-# --- NEW: PURCHASE AGREEMENT PREAMBLE TEMPLATE ---
 PURCHASE_TEMPLATE = """AGREEMENT
 
 THIS AGREEMENT is made and executed at Kolkata on …………………………………………, 202….. between 
@@ -132,286 +300,22 @@ Or
 
 WHEREAS:
 
-A.	The Supplier is engaged inter-alia in the business of manufacture, sale, marketing and distribution of “___________________ products” (herein after referred to as the “products”) under ‘__________________’ brand.   
+A. The Supplier is engaged inter-alia in the business of manufacture, sale, marketing and distribution of “___________________ products” (herein after referred to as the “products”) under ‘__________________’ brand.   
 
-B.	The Company is engaged in the business of operating retail stores under the various formats, in India under the brand name “Spencer’s”.
+B. The Company is engaged in the business of operating retail stores under the various formats, in India under the brand name “Spencer’s”.
 
-C.	The Company proposes to sell through its outlets and otherwise, the products of the Supplier and such other items as may be decided mutually by the parties from time to time.
+C. The Company proposes to sell through its outlets and otherwise, the products of the Supplier and such other items as may be decided mutually by the parties from time to time.
 
-D.	The Company has offered the Supplier to supply the products and the Supplier has accepted the same under the following terms and conditions.
+D. The Company has offered the Supplier to supply the products and the Supplier has accepted the same under the following terms and conditions.
 
 NOW THEREFORE THIS AGREEMENT WITNESSETH AS FOLLOWS:
-
-1.	DEFINITIONS:
-
-In this AGREEMENT, the following expressions shall have, where the context so admits, the meanings assigned thereto.
-
-(a) 	"AGREEMENT" shall mean this document together with appendices hereto if any, and shall include any modifications and alterations hereto made in writing.
-
-(b)	“Effective Date" shall mean the date on which the authorised representatives of the parties have duly executed this AGREEMENT.
-
-(c)	“Licenses" shall mean clearances, licenses, registrations, nominations and permits required under Food Safety and Standards Act 2006, Food Safety and (Standards Packaging And Labelling) Regulations 2011, Legal Metrology Act 2009 and Legal Metrology (Packaging Commodity) Rules 2011 as on today and or amended from time to time and or any other law required to run the business of sale of the food articles. 
-
-(d)	"Products" shall mean and refer to all type of  articles manufactured, processed, supplied, distributed and marketed by the Supplier that had been mutually agreed herein or shall be determined by the Company at a future date,  to be supplied at the retail outlets of the Company or at any other place that the Company may demarcate from time to time.  
-
-(e)	"Parties" shall mean the Company or ___________________together and party shall mean either Spencer’s Retail Limited or _______________-, as the case may be. 
-(f)	Stores’ will mean and include all such Spencer’s stores which are in operation or which may be opened during the Term of this Agreement
-
-2.	SCOPE OF WORK
-
-2.1.	The Company shall periodically place purchase orders for the products and the Supplier shall deliver the same to the Company in such manner and at such place as required/intimated by the Company from time to time.
-
-2.2.	 The Company shall inform the Supplier of the specifications of the products and may ask for the samples prior to such supply and the Supplier shall supply the products strictly as per the specifications as shall be prescribed by the Company.
-
-2.3.	 The Supplier shall ensure that the products are neatly and cleanly packed in such manner and quantity as required by the Company before supply.
-
-The Supplier shall ensure that each and every package containing the materials / products shall contain the following in the main display panel:-
-
-(i) 	the identity of the commodity in the package; 
-(ii)	the accurate number of the commodity contained in the package; 
-(iv)	the Maximum Retail Price. 
-(v)	the name and address of the manufacturer. 
-(vi)	the date when packed and the serial number
-(vii)	the contact details in case of any consumer dispute
-(viii)	Veg Logo / Non Veg Logo
-(ix)	List of ingredients
-(x)	Nutritional Panel
-(xi)	Batch number
-
-
-In the event of any action being brought against the Company or any penalties being imposed on the Company for failure on the part of the Supplier to conform to the Food Safety and Standards Act 2006, Food Safety and (Standards Packaging And Labelling) Regulations 2011, Legal Metrology Act 2009 and Legal Metrology (Packaging Commodity) Rules 2011 or any other law in force from time to time
-
-(a)	the Supplier shall indemnify the Company for any loss or damage incurred by the Company as a result of the action or penalty imposed;
-
-(b)	the Supplier shall indemnify the Company for all costs, expenses and damages incurred by the Company in any and all proceedings, civil or criminal, that may be brought against the Company for failure to confirm to the Packaging Rules;
-
-(c)	the Company shall have the option of terminating this Agreement within 10 days of knowledge of the action being brought against the Company , provided such breach on part of the Supplier had not been addressed to and / or steps initiated for rectification of the same .
-
-
-2.4.	The Company shall provide the Supplier with the schedule of its requirement sufficiently in advance in order to enable the Supplier to plan its supply schedule in advance. However the schedule will only be tentative and give a broad parameter within which the such request for supply shall be placed by the Company .The Supplier shall prepare and keep itself ready for compliance, delivery and complete performance of such request within such time as shall be prescribed by the Company and at such place , which in no event shall exceed a maximum time limit of 14 ( Fourteen ) days from the date of receipt of such purchase/supply request from the Company . The confirmed purchase orders/supply request shall be given by the Company and the Supplier shall operate on the basis of the said purchase/supply request as shall be placed by the Company. 
-
-2.5.	 The Supplier shall at all times during the subsistence of this AGREEMENT supply the products to the Company in the exact quantity and manner at the place confirmed by the Company.
-
-2.6.	 The Supplier shall maintain a system of ‘traceability’ in order to enable the tracing of exact source of quality problem as well as for tracing any suspected defects as may be informed or detected by the Company or the Supplier itself
-
-2.7.	Order Cancellation
-
-a)	Any time before the scheduled commencement of manufacturing of the products as mentioned in the Purchase order, the Company may cancel the order due to any business exigencies, change in environment,  in that event no compensation will be paid to the manufacturer
-b)	Company  may reject and refuse to pay for Products which 
-
-(i)	are not manufactured, packed  as per the specification 
-(ii)	Products which are damaged upon  receipt at Company’s designated place 
-(iii)	Products which are not in compliance with the terms and conditions of this Agreement.
-
-2.8.	RISK IN TRANSIT
-
-Manufacturer shall be solely responsible for all the risk and damages arising during the course of transit.  All risks and title in the goods shall be solely with the manufacturer till the same is received by the Company or its designated person.  Any claims arised during the course of transit and any freight claims shall be solely handled by the Manufacturer.
-
-
-
-3.	PRINCIPAL TO PRINCIPAL BASIS
-
-It is clearly agreed between the parties herein that this AGREEMENT is entered into on a Principal to Principal basis for the benefit of both the parties and a long term relationship between the parties is envisaged hereunder.
-
-a.	It is expressly understood and agreed upon by the Parties to this Agreement that COMPANY shall not be held responsible for any acts and/or omissions of personnel while such personnel are working under the instructions and supervision of VENDOR.
-b.	COMPANY and VENDOR are independent parties to this Agreement and nothing contained in this Agreement shall be construed to create any relationship of a joint venture, association of persons, partnership, principal and agent, principal and consultant or employer and employee between the Parties.
-
-
-
-
-4. PRICE & PAYMENT
-
-4.1 	The Company shall pay the Supplier such prices for the products as may be determined from time to time as mentioned in the annexure. Any successive price change from the last communicated prices will have to be intimated to the company at least 30 days in advance of it’s coming into effect.
-
-4.2	The price to be paid by the Company to the Supplier shall be the invoice price of the product minus the margin and other discounts that shall be offered by the Supplier to the Company, to be deducted from such price .Thus the Net Payable amount shall constitute the Price of the products minus the margin and discounts offered by the Supplier to the Company and shall be inclusive of all taxes , duties, cess and deliveries, which shall be borne by the Supplier .
-
-4.3	The Company shall ensure the payment against supply made by the Supplier with in a period as specified in the Annexure from the receipt of goods from the Supplier, unless there be any defect, damages, pilferages, complaints or claims initiated by any person or entity, without limiting to statutory authority, on the Company in respect to such products supplied by the Supplier within the aforesaid period. 
-
-
-5.	RIGHTS AND DUTIES OF THE SUPPLIER
-
-5.1	The Supplier shall at all times duly and diligently carry out the work as specified in the scope of work herein. The Supplier shall constantly work towards improving the quality, reducing the cost of production and thus improve productivity. 
-
-5.2	The Supplier shall carry out the supply activities strictly as per the specifications/ provisions laid down in the statutes governing the same including the checks prescribed by the Company from time to time.
-
-5.3	The Supplier shall inform the Company of any quality problem immediately upon observing the same.
-
-5.4	The Supplier shall specifically ensure that the products supplied and the packaging used shall conform to the standards/requirements prescribed under the Legal Metrology (Packaged Commodities) Rules, 2011 and Food Safety and Standards Act, 2006 or any other law in force from time to time. 
-
-5.5	The Supplier shall take all necessary action to ensure that there shall be no stoppage/ delay in supply of products from the accepted delivery schedule. 
-5.6	All goods must be supplied by the supplier FOR DC or FOR retail outlet depending on the terms of the PO.
-
-5.7	In case the Supplier is not in a position to adhere to the supply schedule, the Supplier shall inform the Company of the same sufficiently in advance and get the approval of the Company. In such an event, the Company shall be at full liberty to source the products from outside and any loss/additional cost/damage whatsoever that may be incurred by the Company on account of such purchase shall be borne by the Supplier excluding force majure conditions.
-
-5.8	The Supplier shall be responsible for the payment of any duty Goods and Service Tax or such other statutory levies, charges, Payments etc as may be imposed from time to time on the manufacture and sale of the products if required under the law.
-
-5.9	The Supplier confirms that it has obtained the requisite sanctions, licenses, permission from the concerned statutory authorities, bodies for carrying out the aforesaid trade and business and that the Supplier shall comply with such provisions as shall be applicable to the nature of its business during the continuation of the agreement .Any act of non-compliance shall lead to termination and the Supplier indemnifies to the Company for all such acts / abstinence.
-5.10	The Supplier shall not employ any child labour in any manner either manufacturing or packaging or distribution of the goods.
-
-6. CONSIDERATION 
-
-6.1.	 The Supplier has agreed to pay / allow a consideration and credit terms more fully mentioned in the annexure enclosed here to this agreement. 
-	
-
-7.RETURN POLICY
-
-7.1	The Company shall be entitled to return such product that does not comply to the quality standard prescribed under the law or promised at the time of delivery. Any product if found damaged, destroyed, packed not in accordance with the statutory regulations , tampered with or not upto the satisfaction of the Company shall be immediately returned by the Company to the Supplier .However for the said act the Company shall have 30 days’ time from the date of receipt of the said consignment from the Supplier  containing such damaged product .The cost of transportation / courier in regard to the same shall be in the account of the Supplier .
-
-7.2     In case of any quality complaint by the consumer, the Supplier shall replace such product free of cost. The Supplier shall indemnify the Company against all losses, cost that the Company may be exposed to or have to incur on account of any complaint or action initiated by any person /authority due to the Products supplied by the Supplier and offered for sale by the Company at its retail outlets on account of the same not adhering to the standards or promises made or on account of the same violating any Law in force from time to time.
-
-7.3    The supplier shall take back all unsold stock which might pile up due to non-movement of certain SKU’s with respect to others. The same shall be lifted by the supplier from the point where it was delivered.
-
-
-8.	DAMAGE POLICY
-
-8.1	The Supplier shall replace the expired product, if supplied to the Company but the Supplier shall not be liable for any damages reimbursement due to mishandling/improper storage or non -compliance of directions related to the packages in the godowns / retail stores of the Company. 
-
-8.2	The Supplier will replace all expired and damaged products as per actual. The Company shall co-operate with the field force of the Supplier so that both the parties and their concerned employees, officers and staff work jointly in order to reduce the expiry & damage level.
-
-9.	PROMOTION PLAN
-
-9.1	The Supplier will provide Promo Calendar Quarterly to the Company with at least one promotion every English calendar month per retail outlet to increase the sales volume of the Company. In addition to the above promotion Special Promotion will be offered by the Supplier in Festivals seasons specific to a particular region or state. 
-
-9.2	The Supplier will offer consumer promotions for each and every new outlet of the Company opening for a specific period as may be mutually decided by the parties herein.
-
-10.	RIGHTS AND DUTIES OF THE COMPANY
-
-10.1	The Company shall provide the specifications, formulations, designs, etc to the Supplier sufficiently in advance in order to enable the Supplier to supply as per the said specifications, formulations, designs, etc.
-
-10.2	That all supply schedules and purchase orders are to be made available to the Supplier in clear and precise terms as contained in the AGREEMENT and in case of any change or modification in the purchase order the same shall be done with prior consent of the Supplier.
-
-10.3	The Company shall pay for the price of the products to the Supplier in such manner as mutually agreed herein or as may be agreed upon between the parties herein from time to time. 
-
-10.4	The Company shall provide wherever possible, all necessary cooperation to the Supplier in order to enable the Supplier to improve the performance.
-
-10.5	The Company shall be entitled to reject the products wherever they are not complying with the standards approved by the Company under the prevailing food laws. The Supplier shall be provided an opportunity to check the stock before being rejected and the decision of the Company in this regard shall be deemed to be final and binding on the parties. If it is found that rejection is on the quality/manufacturing grounds, the Company shall intimate the Supplier of such rejection and the Supplier shall replace the rejected stock with new stock within a period of 7 ( Seven ) days from the date of receipt of such intimation from the Company.  
-
-10.6	The Supplier shall take back the rejected stocks with in 15 ( Fifteen )  days from the date of intimation. During these 15 ( Fifteen ) days, the Company shall hold the rejected stocks at the cost and risk of the Supplier and the Supplier confirms to indemnify the Company from all costs , claims , actions that may be initiated by any person , authority or entity in respect to such products. In case, the Supplier does not lift the rejected stocks with in 15 ( Fifteen ) days, the expenses or loss which the Company has to incur on account of holding such damaged goods including that of segregation, etc will be debited to the account of the Supplier and shall be recovered from and out of the Agreement payable to the Supplier.
-
-10.7	The Company shall share with the Supplier all such information, as it deems necessary for the purpose of Supplier fulfilling its obligations as per this agreement effectively.
-
-10.8	Notwithstanding what is provided under this agreement, the Company has all rights to terminate this agreement by giving 4 ( four ) weeks’ notice in writing to the Supplier . The Company shall be entitled to forthwith terminate the AGREEMENT in case the Supplier is not fulfilling the obligations herein efficiently or standards demarcated and prescribed by the Company or there has been any instances of misappropriation of money, materials, losses, etc committed by any employees , agents , officers or staff of the Supplier.
-
-11.	COMPLIANCE OF LEGISLATION
-
-11.1	The Supplier shall ensure at all times that it shall comply with all requirements set forth under any law, statute, rules, regulations including but not limited Food Safety and Standards Act 2006, Food Safety and Standards (Packaging And Labelling) Regulations 2011, Legal Metrology Act 2009 and Legal Metrology (Packaged Commodities) Rules 2011, Labour Law, Provident Fund and Employee State Insurance Act etc. as may be in force in India from time to time for the discharge of scope of work and manufacture of the products, as envisaged herein.
-
-11.2	The Supplier shall obtain all necessary licenses, permissions, etc required under law or bye law for manufacturing, selling and delivering the products as required under this AGREEMENT, at its own cost.
-11.3	It is specifically agreed herein that all the persons employed by the Supplier for supplying the products directly or indirectly shall at all times be the employees of the Supplier. It shall be the duty of the Supplier to comply with requirements prescribed under various labour statutes like PF, ESI, Minimum Wages, maintenance of registers, etc. any penalty imposed on account of not maintaining the above shall be exclusively borne by the supplier. The supplier shall ensure that there shall be no claim of employment with the company by any of the persons engaged by the supplier for supplying the products and those employees/ personnel who are deputed by the supplier to man the bays or aisles in the company’s outlets for the purpose of sales promotion activities”.
-
-12.	WARRANTY
-
-12.1	The Supplier ensures that every possible care is taken during the manufacturing and/or packaging process of the products and the products are manufactured by qualified and experienced staff under various strict quality checks at several points in the factories. The Supplier being a law abiding Company complies the provisions of required law under various enactments. 
-
-12.2	The Supplier shall replace the products if any quality or manufacturing defect found in the products. Further the Supplier assures to give warranty in such form and manner as has been set forth in any Act or Rule applicable for the products from time to time. 
-
-12.3	The Supplier shall give the Company a proper invoice for all the supplies made giving therein all the particulars of the products and also warrants that :-
-
-a.	It is duly organized, validly existing and in good standing under the laws of India;
-b.	It has full power and authority to execute, deliver and perform its obligations under this Agreement and to carry out the transactions contemplated hereby;
-c.	It has taken all necessary corporate and other action under Applicable Laws and its constitutional documents to authorize the execution, delivery and performance of this Agreement;
-d.	It has the financial standing and capacity to execute the agreement;
-e.	This Agreement constitutes its legal, valid and binding obligation enforceable against it in accordance with the terms hereof;
-f.	The execution, delivery and performance of this Agreement will not conflict with, result in the breach of, constitute a default under or accelerate performance required by any of the terms of the Supplier Memorandum and Articles of Association or any Applicable Law or any covenant, agreement, understanding, decree or order to which the Supplier is a party or by which Supplier or any of its properties or assets are bound or affected;
-g.	There are no actions, suits, proceedings or investigations pending or to The Supplier’s knowledge threatened against the Supplier at law or in equity before any court or before any other judicial, quasi-judicial or other authority, the outcome of which may constitute the Supplier Event of Default or which individually or in the aggregate may result in Material Adverse Effect;
-h.	It has no knowledge of any violation or default with respect to any order, writ, injunction or any decree of any court or any legally binding order of any government authority, which may result in Material Adverse Effect; It has complied with all applicable law and has not been subject to any fines, penalties, injunctive relief or any other civil or criminal liabilities which in the aggregate have or may have Material Adverse Effect;
-i.	No representation or warranty by the Supplier contained herein or in any other document furnished by the Supplier to the Company or to any government authority in relation to Applicable Licenses contains or will contain any untrue statement of material fact or omits or will omit to state a material fact necessary to make such representation or warranty 
-j.	The Supplier also acknowledges and hereby accepts the risk of inadequacy, mistake or error in or relating to any of the matters set forth above and hereby confirms that the Company shall not be liable for the same in any manner whatsoever to the Supplier
-k.	The Products are genuine and free from defects and have the requisite manufacturer warranty (if any) associated with such Product and meet the specifications of the PO/samples
-
-
-13.	CONFIDENTIALITY  
-
-13.1	That the parties do hereby assure each other and agree that all information, details, documents, etc. which they get in possession by virtue of this agreement are very confidential and they will not permit to share or use for any other purpose whatsoever. 
-
-13.2	The parties further assure that they will not use the logos, trademark, and design of each other for any purpose other than what is envisaged under this agreement except with the express and written consent of each other.    
-
-13.3	The Supplier shall not have the right to assign any part of this agreement to any other third party at any point of time .Any such assignment shall be deemed to be in contravention of this agreement and in such event The Company shall have the right to terminate the agreement with immediate effect, without limiting to its rights to claim damages for such unauthorized assignment. 
-
-
-14.	INDEMNITY
-
-14.1	The Supplier hereby agree to indemnify the Company against all losses, claims, damage, cost, whatsoever incurred and/or to be incurred by the Company on account of any act of commission or omission or negligence or any such act or breach of the terms and conditions contained herein. 
-
-14.2	The Supplier hereby specifically agree to indemnify the Company against any claims, fine, penalty, award, order, judgment, etc. passed against the parties by any court, forum, authority, etc. arising out of any manufacturing defects and /or non-compliance of standards or requirements prescribed under food laws as may be applicable from time to time. 
-
-14.3	The Supplier shall bear the cost, if required by the Company, towards fine and legal fees for defending the case.  
-
-14.4	Whenever the Company receives any notice, summons, warrant, etc. of any potential claim, suit, complaint, etc., in regard to the products supplied and delivered by the Supplier to the Company, the Company shall be entitled, to take up such defence and engage such counsel of its choice to contest the case or opt for settlement/compromise/compound of the same and all costs, charges for the same shall be payable by the Supplier. 
-
-14.5	The Supplier shall render all possible assistance and cooperation in contesting and defending the case. Any such case / dispute / litigation case may be compromised or settled with mutual agreement of the parties. 
-
-15.	FORCE MAJEURE
-
-15.1	That the failure or delay of any party to perform any obligations under this agreement solely by reason of act of God, acts of Government (except as otherwise enumerated herein), riots, wars, strikes, lockouts, accidents in transportation or other causes beyond its control (collectively referred to as the "Force Majeure") shall not be deemed to be a breach of this agreement, provided, that the party so prevented from performance of its obligations herein, shall not have caused such Force Majeure. The party so prevented shall have used reasonable diligence to avoid such Force Majeure or ameliorate its effects, and shall continue to take all actions within its power to comply as fully as possible with the terms and conditions of this agreement.
-
-15.2	That except where the nature of the event shall prevent it from doing so, the party suffering such Force Majeure shall notify the other party in writing within seven days after the occurrence of such Force Majeure and shall in every instance, to the extent reasonable and lawful under the circumstances, use its best efforts to remove or remedy such cause with all reasonable dispatch.
-
-15.3	That in the event of Force Majeure persists for a consecutive period of more than three months, and then the other party shall have the option to terminate the agreement without incurring any liability.
-
-16.	TERM AND TERMINATION OF THE AGREEMENT
-
-16.1	Unless terminated, this agreement shall remain valid for a period of 5 ( Five  ) year from date of signing this agreement.
-
-16.2	The Company shall be entitled to terminate this agreement without any cause by giving 30 days’ notice.   
-
-16.3	Either party may terminate this agreement by giving one month’s notice in writing to the other party without assigning any reason.  
-
-In the event the Supplier being unable to provide the materials / products within the time frame mentioned herein or as shall be mentioned in the intimation / Purchase Order to be raised by the Company, then the Company shall have the right to forthwith terminate this agreement.  It is hereby clarified for the purpose of abundant caution that failure of the Supplier to distribute , deliver and display the products shall be considered to be a ground for termination without limiting to the terms of this Agreement that the Supplier shall be liable to pay for the damages suffered by the Company due to such non-compliance or breach of the terms and conditions of this agreement.
-The grounds on which the Company can fortwith  terminate the agreement in addition to what stated hereinabove are as follows:-
-
-a. 	The Supplier has failed to perform or discharge any of its obligations in accordance with the provisions of this Agreement, unless such event has occurred because of a Force Majeure Event, or due to reasons solely attributable to the Company without any contributory factor of the the Supplier;
-b.	 if at any time any payment, assessment, charge, lien, penalty or Damage herein specified to be paid by the Supplier to the Company, or any part thereof, shall be in arrears and unpaid;
-c. 	Any representation made or warranties given by the Supplier under this Agreement is found to be false or misleading;
-d. 	The Supplier engaging or knowingly has allowed any of its employees to engage in any activity prohibited by law or which constitutes a breach of or an offence under any law, in the course of any activity undertaken pursuant to this Agreement;
-e. 	The Supplier has been adjudged as bankrupt or become insolvent:
-f. 	A resolution for voluntary winding up has been passed by the shareholders of the Supplier;
-g. 	Repeated grievances had been raised by customers in respect to the quality of products within a particular period
-h. 	The Supplier has failed to deliver the materials within time;
-i.	The Supplier has failed to abide by the statutory regulations or there has been a gross negligence or violation of such provisions
-j.	Consignment had been delivered by the Supplier which does not relate with the request placed by the Company or there had been short / excess delivery of products
-k. 	The Supplier had failed to receive back the products inspite of intimation from the Company or after the stipulated period of display
-
-Furthermore the Company shall have the exclusive right to terminate the agreement with immediate effect at any point of time during its pendency, if the Supplier fails and / or does not adhere to the following essential requisites , namely:-
-i.	Quality, 
-ii.	Service, 
-iii.	Marketing Activities
-iv.	Delay in Delivery
-v.	Non acceptance of defective / damaged materials
-
-Upon expiry of notice period of termination, both the parties shall endeavor to reconcile the accounts within 15 days from the expiry of the notice period.
-
-17.	QUALITY POLICY	
-
-17.1	The Company is synonymous with quality and service to its customers. Keeping the standards of quality policy of the Company, the Supplier shall adhere to the Standards prescribed under Foods Laws or any other rules, Act etc for maintaining food safety standards. The Supplier shall carry assurance of product safety and quality in accordance with prescribed standards.
-
-17.2	If the entire product batch is defective, the Company shall have the right to immediately remove the same from display at once. In such case the cost of goods removed and the cost of logistics shall be debited on the Supplier. The Supplier has to reply back on the complaint along with counter measures taken by him within a week. The Supplier shall try to redress the complaint and reconcile with the aggrieved customer.
-
-
-18.	NOTICES
-Any notice or letter, required to be served by one party on another in pursuance to this Agreement shall be deemed to have been properly served on such other if delivered either by Registered Post with acknowledgement due or courier or hand delivery at the respective address mentioned here in above.
-
-19.	AMENDMENTS & MODIFICATIONS
-
-Any amendments or modification to the terms of this Agreement can be initiated  / intimated by either the retailer or the Vendor  by way of a letter addressed to the other party and such amendment or modification shall become binding on all the parties herein when the same is duly acknowledged and accepted by such other party.
-
-20.	INTELLECTUAL PROPERTY RIGHTS
-
-None of the parties shall use the Trademark, copyright or any other Intellectual property right of another in any unauthorized manner or in any advertisement, publicity whatsoever without the written permission or authorization of the owner of such Trademark, copyright or intellectual property right.
-
- 
-21.	JURISDICTION 
-The courts of Kolkata will have jurisdiction to try the matter in case of any dispute arising of this agreement. 
-
 """
 
 # ------------------------------------------------
 # 2) HELPERS
 # ------------------------------------------------
 def docx_from_plain_text(plain_text: str, title: str = None) -> BytesIO:
-    """Create a .docx from plain text. Adds optional centered bold title."""
     doc = Document()
-    # Optional margins (nicer print layout)
     for s in doc.sections:
         s.top_margin = Inches(1)
         s.bottom_margin = Inches(1)
@@ -426,7 +330,6 @@ def docx_from_plain_text(plain_text: str, title: str = None) -> BytesIO:
         h.runs[0].font.size = Pt(16)
         doc.add_paragraph("")
 
-    # Allow multi-paragraphs
     for block in plain_text.split("\n"):
         doc.add_paragraph(block)
 
@@ -442,10 +345,6 @@ def add_heading(doc: Document, text: str, size: int = 16, center=True):
     r.font.size = Pt(size)
     if center:
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-def rephrase_clause(text: str) -> str:
-    """Stub for AI rephrase. Replace with OpenAI call if desired."""
-    return text
 
 def compose_full_contract(preamble: str, clause_texts: list, parties: list, annexure_note: str) -> str:
     body = [preamble.strip(), ""]
@@ -463,6 +362,10 @@ def compose_full_contract(preamble: str, clause_texts: list, parties: list, anne
         body.append("")
     return "\n".join(body)
 
+# --- helper to strip HTML tags for docx writing (keeps export clean even if clauses come from Quill) ---
+def strip_html(x: str) -> str:
+    return re.sub(r"<[^>]+>", "", x or "")
+
 def build_docx(
     preamble: str,
     clause_texts: list,
@@ -471,8 +374,6 @@ def build_docx(
     title="AGREEMENT",
     annexure_file=None
 ) -> BytesIO:
-    from docx.shared import Inches
-    
     doc = Document()
     for s in doc.sections:
         s.top_margin = Inches(1)
@@ -480,15 +381,13 @@ def build_docx(
         s.left_margin = Inches(1)
         s.right_margin = Inches(1)
 
-    # Title
     add_heading(doc, title.upper(), 18, True)
-    doc.add_paragraph(preamble.strip())
+    doc.add_paragraph(strip_html(preamble.strip()))
     doc.add_paragraph("")
 
-    # Clauses
     for t in clause_texts:
         p = doc.add_paragraph()
-        ts = t.strip()
+        ts = strip_html(t.strip())
         if len(ts) >= 2 and ts[:2].isdigit() and "." in ts[:5]:
             first_line = ts.split("\n", 1)[0]
             run = p.add_run(first_line)
@@ -497,46 +396,33 @@ def build_docx(
             if remainder:
                 doc.add_paragraph(remainder)
         else:
-            p.add_run(t)
+            p.add_run(ts)
         doc.add_paragraph("")
 
-    # Parties
     if parties:
         add_heading(doc, "PARTIES", 14, False)
-        for idx, p in enumerate(parties, 1):
-            doc.add_paragraph(f"{idx}. {p}")
+        for idx, ptxt in enumerate(parties, 1):
+            doc.add_paragraph(f"{idx}. {strip_html(ptxt)}")
 
-    # Annexure note
     if annexure_note:
         doc.add_paragraph("")
         add_heading(doc, "ANNEXURE", 14, False)
-        doc.add_paragraph(annexure_note)
+        doc.add_paragraph(strip_html(annexure_note))
 
-    # Annexure table (if Excel provided)
     if annexure_file is not None:
         try:
-            import pandas as pd
             df = pd.read_excel(annexure_file)
-
-            # Page break before annexure table
             doc.add_page_break()
             add_heading(doc, "ANNEXURE – DETAILS", 14, True)
-
-            # Create table
             table = doc.add_table(rows=1, cols=len(df.columns))
             table.style = "Table Grid"
-
-            # Header row
             hdr_cells = table.rows[0].cells
             for j, col in enumerate(df.columns):
                 hdr_cells[j].text = str(col)
-
-            # Data rows
             for _, row in df.iterrows():
                 row_cells = table.add_row().cells
                 for j, val in enumerate(row):
                     row_cells[j].text = "" if pd.isna(val) else str(val)
-
         except Exception as e:
             doc.add_paragraph("")
             doc.add_paragraph(f"[Annexure could not be inserted: {e}]")
@@ -546,9 +432,7 @@ def build_docx(
     buf.seek(0)
     return buf
 
-
 def default_annexure_template() -> BytesIO:
-    """Return a blank Excel template for Annexure."""
     df = pd.DataFrame(
         columns=["S.No", "Item/Deliverable", "Description", "Quantity", "Unit Price", "Total", "Remarks"]
     )
@@ -559,13 +443,31 @@ def default_annexure_template() -> BytesIO:
     return out
 
 def default_purchase_annexure_template() -> BytesIO:
-    """Return a blank Excel template for Annexure."""
-    df = pd.read_excel("Purchase_Agreement_Annexure_Fromat_Excel.xlsx")
+    # Keep your local template path as you had
+    df = pd.read_excel(r"C:\Users\subhanjan.nandy\Downloads\Annexure Fromat Excel.xlsx")
     out = BytesIO()
     with pd.ExcelWriter(out, engine="xlsxwriter") as writer:
         df.to_excel(writer, index=False, sheet_name="Annexure")
     out.seek(0)
     return out
+
+def df_for_display(df: pd.DataFrame) -> pd.DataFrame:
+    # Ensure blanks stay blanks (no None)
+    out = df.copy()
+    out = out.astype(object)
+    out = out.where(pd.notnull(out), "")
+    out = out.replace({None: ""})
+    return out
+
+def df_for_save(df: pd.DataFrame, numeric_cols: list[str] | None = None) -> pd.DataFrame:
+    out = df.copy()
+    out = out.replace("", pd.NA)
+    if numeric_cols:
+        for col in numeric_cols:
+            if col in out.columns:
+                out[col] = pd.to_numeric(out[col], errors="coerce")
+    return out
+
 # ------------------------------------------------
 # 3) STREAMLIT APP
 # ------------------------------------------------
@@ -574,22 +476,29 @@ st.title("📄 Interactive Contract Generator")
 
 # GLOBAL STATE
 if "workflow" not in st.session_state:
-    st.session_state.workflow = "form"          # form → clauses → annexure → preview
+    st.session_state.workflow = "form"  # form → clauses → annexure → preview
 if "answers" not in st.session_state:
     st.session_state.answers = {}
 if "clause_store" not in st.session_state:
-    # {clause_no: {"text":..., "approved": False}}
-    st.session_state.clause_store = {i: {"text": CLAUSES[i], "approved": False} for i in CLAUSES}
+    st.session_state.clause_store = {}   # will be synced per contract type
 if "custom_clauses" not in st.session_state:
-    st.session_state.custom_clauses = []        # list of {"title":..., "text":..., "approved": True/False}
+    st.session_state.custom_clauses = []  # list of {"title":..., "text":..., "approved": True/False}
 if "parties" not in st.session_state:
     st.session_state.parties = []
 if "annexure_note" not in st.session_state:
     st.session_state.annexure_note = ""
 if "annexure_file" not in st.session_state:
     st.session_state.annexure_file = None
+if "prev_contract_type" not in st.session_state:
+    st.session_state.prev_contract_type = None
+    
+# ✅ add these two flags here
+if "clear_custom_quill" not in st.session_state:
+    st.session_state.clear_custom_quill = False
+if "clear_cc_title" not in st.session_state:
+    st.session_state.clear_cc_title = False
 
-# Top selectors
+# ------------- selectors -------------
 entity = st.selectbox("Entity", ["", "RPSG Ventures", "PCBL", "Spencers Retail", "AquaPharm", "Nature's Basket"])
 contract_type = st.selectbox(
     "Contract Type",
@@ -600,11 +509,48 @@ contract_type = st.selectbox(
     index=0
 )
 
+# --- Reset state when the contract type changes ---
+if "last_contract_type" not in st.session_state:
+    st.session_state.last_contract_type = contract_type
+
+if contract_type != st.session_state.last_contract_type:
+    # Reset clause store depending on contract type
+    if contract_type == "NDA":
+        st.session_state.clause_store = {i: {"text": CLAUSES_NDA[i], "approved": False} for i in CLAUSES_NDA}
+    elif contract_type == "PURCHASE AGREEMENT":
+        try:
+            st.session_state.clause_store = {i: {"text": CLAUSES_PA[i], "approved": False} for i in CLAUSES_PA}
+        except Exception:
+            st.session_state.clause_store = {}
+    else:
+        st.session_state.clause_store = {}
+
+    # Always clear custom clauses & parties when switching contract type
+    st.session_state.custom_clauses = []
+    st.session_state.parties = []
+
+    st.session_state.last_contract_type = contract_type
+
+# --- Sync clause store whenever type changes (kept, harmless) ---
+def sync_clause_store():
+    if contract_type == "NDA":
+        st.session_state.clause_store = {i: {"text": CLAUSES_NDA[i], "approved": False} for i in CLAUSES_NDA}
+        st.session_state.custom_clauses = []
+    elif contract_type == "PURCHASE AGREEMENT":
+        st.session_state.clause_store = {i: {"text": CLAUSES_PA[i], "approved": False} for i in CLAUSES_PA}
+    elif contract_type:
+        st.session_state.clause_store = {}
+    else:
+        st.session_state.clause_store = {}
+        st.session_state.custom_clauses = []
+
+if st.session_state.prev_contract_type != contract_type:
+    sync_clause_store()
+    st.session_state.prev_contract_type = contract_type
+
 st.markdown("---")
 
-# ================
-# STEP 1: FORM UI
-# ================
+# ================ STEP 1: FORM UI ================
 if st.session_state.workflow == "form":
     if contract_type == "NDA":
         st.subheader("NDA – Collect 10 Inputs")
@@ -626,9 +572,7 @@ if st.session_state.workflow == "form":
 
     elif contract_type == "PURCHASE AGREEMENT":
         st.subheader("Purchase Agreement – Collect Inputs")
-        # Keep your existing PA business inputs (18) AND add identifiers needed by PURCHASE_TEMPLATE
         pa_fields = [
-            # --- Your earlier 'business' inputs (kept for clauses/annexure details) ---
             ("Effective_Date", "Effective Date (DD-MM-YYYY)"),
             ("Buyer_Name", "Buyer Name"),
             ("Buyer_Address", "Buyer Address"),
@@ -653,7 +597,10 @@ if st.session_state.workflow == "form":
             st.session_state.answers[key] = cols[i % 2].text_input(label, value=st.session_state.answers.get(key, ""))
 
     else:
-        st.info("Select an Entity and a Contract Type to begin.")
+        if contract_type:
+            st.info("Proceed to the Clauses step to add your own clauses for this agreement.")
+        else:
+            st.info("Select an Entity and a Contract Type to begin.")
 
     left, right = st.columns([1, 1])
     if left.button("Save & Go to Clauses ➡️", use_container_width=True, key="to_clauses_btn"):
@@ -661,8 +608,7 @@ if st.session_state.workflow == "form":
         st.rerun()
     right.button("Reset Form", on_click=lambda: st.session_state.answers.clear(), use_container_width=True, key="reset_form_btn")
 
-
-# --- QUICK PREVIEW / DOWNLOAD / SUBMIT on the NDA form ---
+# --- Quick actions for NDA on the form page ---
 if st.session_state.workflow == "form" and contract_type == "NDA":
     all_filled = all(st.session_state.answers.get(k, "").strip() for k in
         ["DAY","MONTH","RPSG_CIN_No","Vendor_Name","Vendor_CIN_No","Vendor_Office","RPSG_Email","Vendor_SPOC","Vendor_Email","RPSG_SPOC"]
@@ -675,17 +621,16 @@ if st.session_state.workflow == "form" and contract_type == "NDA":
             ["DAY","MONTH","RPSG_CIN_No","Vendor_Name","Vendor_CIN_No","Vendor_Office","RPSG_Email","Vendor_SPOC","Vendor_Email","RPSG_SPOC"]}
     preamble = NDA_TEMPLATE.format(**data)
 
-    approved = [st.session_state.clause_store[i]["text"]
-                for i in sorted(st.session_state.clause_store)
-                if st.session_state.clause_store[i]["approved"]]
+    store = st.session_state.clause_store or {}
+    approved = [store[i]["text"] for i in sorted(store) if store[i]["approved"]] if store else []
     if not approved:
-        approved = [st.session_state.clause_store[i]["text"] for i in sorted(st.session_state.clause_store)]
+        approved = [store[i]["text"] for i in sorted(store)] if store else []
 
     quick_preview_text = compose_full_contract(
         preamble=preamble,
         clause_texts=approved,
         parties=st.session_state.parties,
-        annexure_note=""  # NDA: no annexure
+        annexure_note=""
     )
 
     if col_q1.button("👁️ Preview now", key="qa_preview_btn", disabled=not all_filled, use_container_width=True):
@@ -713,42 +658,100 @@ if st.session_state.workflow == "form" and contract_type == "NDA":
     if col_q3.button("✅ Submit", key="qa_submit_btn", disabled=not all_filled, use_container_width=True):
         st.success("Submitted! (You can wire this to email or your DMS.)")
 
-
 # =======================
 # STEP 2: CLAUSE MANAGER
 # =======================
 elif st.session_state.workflow == "clauses":
     st.subheader("Clauses – Edit / Rephrase / Approve")
-    st.caption("Pick a clause, edit/rephrase, then mark it Approved. Add parties or custom clauses below.")
+    st.caption("For NDA/Purchase: edit standard clauses and add custom ones. For other types: add custom clauses only.")
 
-    # colA, colB = st.columns([1, 2])
-    #with colA:
-    selected = st.selectbox("Standard clause (1–22)", list(CLAUSES.keys()), key="clause_select")
-    display = st.session_state.clause_store[selected]["text"]
+    is_std = contract_type in ("NDA", "PURCHASE AGREEMENT")
 
-    # Rich text editor with Quill.js
-    edited = st_quill(
-        value=display,
-        placeholder="Edit clause text here...",
-        key=f"clause_quill_{selected}",
-        # theme="snow",  # or "bubble"
+    # ---------- STANDARD CLAUSES (only NDA / PA) ----------
+    if is_std and st.session_state.clause_store:
+        selected_keys = sorted(st.session_state.clause_store.keys())
+        selected = st.selectbox("Standard clause (pick to edit)", selected_keys, key="clause_select")
+        display = st.session_state.clause_store[selected]["text"]
+
+        edited = st_quill(
+            value=display,
+            placeholder="Edit clause text here...",
+            key=f"clause_quill_{selected}",
+        )
+
+        c1, c2 = st.columns(2)
+        if c1.button("Save Edit", key=f"save_edit_{selected}"):
+            if edited is not None:
+                st.session_state.clause_store[selected]["text"] = edited
+                st.success("Saved.")
+
+        st.session_state.clause_store[selected]["approved"] = st.checkbox(
+            "Approved",
+            value=st.session_state.clause_store[selected]["approved"],
+            key=f"approved_{selected}",
+        )
+
+        st.markdown("---")
+
+    # ---------- CUSTOM CLAUSES (ALL CONTRACT TYPES) ----------
+    st.markdown("### ➕ Add Custom Clause")
+
+    # Use a contract-type-specific key for the Quill box
+    custom_quill_key = f"custom_quill_{contract_type or 'general'}"
+
+    # If the previous click asked us to clear the widgets, do it BEFORE creating them
+    if st.session_state.clear_custom_quill:
+        st.session_state.pop(custom_quill_key, None)
+        st.session_state.clear_custom_quill = False
+
+    if st.session_state.clear_cc_title:
+        st.session_state.pop("cc_title", None)
+        st.session_state.clear_cc_title = False
+
+    # Now safely create the widgets
+    cc_title = st.text_input("Custom Clause Title", key="cc_title")
+
+    cc_body_html = st_quill(
+        value=st.session_state.get(custom_quill_key, ""),
+        placeholder="Write your custom clause here…",
+        key=custom_quill_key,
     )
 
-    c1, c2 = st.columns(2)
-    if c1.button("Save Edit", key=f"save_edit_{selected}"):
-        if edited:
-            st.session_state.clause_store[selected]["text"] = edited
-            st.success("Saved.")
+
+    add_col1, add_col2 = st.columns([1, 1])
+    if add_col1.button("➕ Add Custom Clause", key="add_custom_clause_btn"):
+        if cc_title.strip() and cc_body_html and cc_body_html.strip():
+            st.session_state.custom_clauses.append(
+                {"title": cc_title.strip(), "text": cc_body_html, "approved": True}
+            )
+            # Set flags so next run clears the widgets BEFORE they are created
+            st.session_state.clear_custom_quill = True
+            st.session_state.clear_cc_title = True
+            st.rerun()
 
 
-    st.session_state.clause_store[selected]["approved"] = st.checkbox(
-        "Approved",
-        value=st.session_state.clause_store[selected]["approved"],
-        key=f"approved_{selected}"
-    )
+    # Show the custom clauses list
+    if st.session_state.custom_clauses:
+        st.markdown("#### Added Custom Clauses")
+        for idx, c in enumerate(st.session_state.custom_clauses, 1):
+            with st.expander(f"{idx}. {c.get('title','Custom Clause')}", expanded=False):
+                # Render with HTML so Quill formatting shows in the app
+                st.markdown(c.get("text",""), unsafe_allow_html=True)
+                # Toggle approved if needed
+                c["approved"] = st.checkbox(
+                    f"Approved – {c.get('title','Custom Clause')}",
+                    value=c.get("approved", True),
+                    key=f"cc_approved_{idx}",
+                )
+                # Remove button
+                if st.button(f"❌ Remove", key=f"remove_cc_{idx}"):
+                    st.session_state.custom_clauses.pop(idx - 1)
+                    st.rerun()
 
-    #with colB:
-    st.write("**Parties**")
+    st.markdown("---")
+
+    # ---------- PARTIES (ALL CONTRACT TYPES) ----------
+    st.markdown("### 👥 Parties")
     new_party = st.text_input("Add Party (Name, Role, Address/email optional)", key="party_input")
     cpa, cpb = st.columns(2)
     if cpa.button("Add Party", key="add_party_btn"):
@@ -759,31 +762,9 @@ elif st.session_state.workflow == "clauses":
     if st.session_state.parties:
         st.write("- " + "\n- ".join(st.session_state.parties))
 
-    st.write("**Add Custom Clause**")
-    cc_title = st.text_input("Custom Clause Title", key="cc_title")
-    cc_text = st.text_area("Custom Clause Text", height=160, key="cc_text")
+    st.markdown("---")
 
-    if st.button("Add Custom Clause", key="add_custom_clause_btn"):
-        if cc_title.strip() and cc_text.strip():
-            st.session_state.custom_clauses.append(
-                {"title": cc_title.strip(), "text": cc_text.strip(), "approved": True}
-            )
-            st.success(f"Custom clause '{cc_title}' added.")
-            st.rerun()   # ✅ use this instead of experimental_rerun
-
-    # 👇 show all added custom clauses right away
-    if st.session_state.custom_clauses:
-        st.markdown("#### Added Custom Clauses")
-        for idx, c in enumerate(st.session_state.custom_clauses, 1):
-            with st.expander(f"{idx}. {c['title']}", expanded=False):
-                st.write(c['text'])
-                if st.button(f"❌ Remove {c['title']}", key=f"remove_cc_{idx}"):
-                    st.session_state.custom_clauses.pop(idx-1)
-                    st.rerun()   # ✅ updated here too
-
-
-
-
+    # ---------- NAV ----------
     nav1, nav2 = st.columns([1, 1])
     if nav1.button("⬅️ Back to Form", key="clauses_back_form"):
         st.session_state.workflow = "form"
@@ -794,10 +775,7 @@ elif st.session_state.workflow == "clauses":
         st.session_state.workflow = "preview" if contract_type == "NDA" else "annexure"
         st.rerun()
 
-
-# =========================
-# STEP 3: ANNEXURE (Excel)
-# =========================
+# ========================= STEP 3: ANNEXURE (Excel) =========================
 elif st.session_state.workflow == "annexure":
     if contract_type == "NDA":
         st.session_state.annexure_file = None
@@ -824,7 +802,7 @@ elif st.session_state.workflow == "annexure":
 
     if contract_type == "PURCHASE AGREEMENT":
         template = default_purchase_annexure_template()
-    else: 
+    else:
         template = default_annexure_template()
     st.download_button(
         label="Download Blank Annexure Template (.xlsx)",
@@ -834,6 +812,40 @@ elif st.session_state.workflow == "annexure":
         use_container_width=True,
         key="annexure_template_dl"
     )
+
+    # Inline editor only for Purchase Agreement
+    if contract_type == "PURCHASE AGREEMENT" and not no_annexure:
+        st.markdown("### ✏️ Edit Annexure Inline")
+        if st.session_state.annexure_file:
+            raw_df = pd.read_excel(st.session_state.annexure_file)
+        else:
+            raw_df = pd.read_excel(r"C:\Users\subhanjan.nandy\Downloads\Annexure Fromat Excel.xlsx")
+
+        display_df = df_for_display(raw_df)
+        edited_df = st.data_editor(
+            display_df,
+            num_rows="dynamic",
+            use_container_width=True,
+            key="annexure_editor"
+        )
+
+        col1, col2 = st.columns(2)
+        if col1.button("💾 Save Edits", key="save_annexure_edits_btn"):
+            numeric_cols = ["Quantity", "Unit Price", "Total", "% of Turnover", "Amount per store (Rs)",
+                            "Amount per month (Rs)", "Amount per Vendor (Rs)", "Amount per New Store Launch (Rs)",
+                            "Amount per  Store  (Rs)", "Rs"]
+            cleaned_to_save = df_for_save(edited_df, numeric_cols=numeric_cols)
+
+            out = BytesIO()
+            with pd.ExcelWriter(out, engine="xlsxwriter") as writer:
+                cleaned_to_save.to_excel(writer, index=False, sheet_name="Annexure")
+            out.seek(0)
+            st.session_state.annexure_file = out
+            st.success("Edits saved! Download & DOCX will include your changes (with blanks kept blank).")
+
+        if col2.button("↩️ Reset Editor", key="reset_annexure_edits_btn"):
+            st.session_state.annexure_file = None
+            st.info("Editor reset. Please upload again or use default template.")
 
     st.text_area(
         "Annexure Note (appears in contract)",
@@ -856,10 +868,7 @@ elif st.session_state.workflow == "annexure":
         st.session_state.workflow = "preview"
         st.rerun()
 
-
-# =========================
-# STEP 4: PREVIEW & EXPORT
-# =========================
+# ========================= STEP 4: PREVIEW & EXPORT =========================
 elif st.session_state.workflow == "preview":
     st.subheader("Preview, Download, Submit")
 
@@ -884,51 +893,57 @@ elif st.session_state.workflow == "preview":
         preamble = f"{contract_type} between parties."
         title = contract_type
 
-    store = st.session_state.clause_store
-
-    # 👇 Toggle to control what's included
     only_approved = st.checkbox("Show only approved clauses", value=False, key="preview_only_approved")
 
-    if only_approved:
-        clause_list = [store[i]["text"] for i in sorted(store) if store[i]["approved"]]
-        if not clause_list:
-            st.info("No clauses approved yet; showing all clauses instead.")
-            clause_list = [store[i]["text"] for i in sorted(store)]
-    else:
-        clause_list = [store[i]["text"] for i in sorted(store)]
+    # --- STANDARD (NDA/PA only) ---
+    standard_clauses = []
+    if contract_type in ("NDA", "PURCHASE AGREEMENT"):
+        store = st.session_state.clause_store or {}
+        if only_approved:
+            standard_clauses = [store[i]["text"] for i in sorted(store) if store[i]["approved"]]
+            if not standard_clauses:
+                st.info("No clauses approved yet; showing all clauses instead.")
+                standard_clauses = [store[i]["text"] for i in sorted(store)]
+        else:
+            standard_clauses = [store[i]["text"] for i in sorted(store)]
 
-    custom = [
+    # --- CUSTOM (all) ---
+    custom_clauses = [
         f"{c.get('title','Custom Clause')}\n{c.get('text','')}"
         for c in st.session_state.custom_clauses
         if c.get("approved", True)
     ]
-    all_clauses = clause_list + custom
+
+    # --- MERGE ---
+    if contract_type in ("NDA", "PURCHASE AGREEMENT"):
+        clause_list = standard_clauses + custom_clauses
+    else:
+        clause_list = custom_clauses
 
     annexure_text = "" if contract_type == "NDA" else st.session_state.annexure_note
 
     preview_text = compose_full_contract(
         preamble=preamble,
-        clause_texts=all_clauses,
-        parties=st.session_state.parties,
+        clause_texts=clause_list,
+        parties=st.session_state.parties,      # parties always included
         annexure_note=annexure_text,
     )
 
     st.markdown("### 📑 Preview")
-    st.markdown(preview_text.replace("\n", "<br>"), unsafe_allow_html=True)
+    # Render as HTML so Quill formatting (in custom clauses) shows nicely
+    st.markdown(preview_text, unsafe_allow_html=True)
 
-    # 👇 Show annexure table if uploaded
     if contract_type != "NDA" and st.session_state.annexure_file:
         st.markdown("### 📎 Annexure (Preview)")
         annexure_df = pd.read_excel(st.session_state.annexure_file)
-        st.dataframe(annexure_df, use_container_width=True)
-
+        st.dataframe(df_for_display(annexure_df), use_container_width=True)
 
     c1, c2, c3 = st.columns(3)
     with c1:
         docx_file = build_docx(
             preamble=preamble,
-            clause_texts=all_clauses,
-            parties=st.session_state.parties,
+            clause_texts=clause_list,
+            parties=st.session_state.parties,   # parties in the DOCX too
             annexure_note=annexure_text,
             title=title,
             annexure_file=st.session_state.annexure_file
