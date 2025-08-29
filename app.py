@@ -444,7 +444,7 @@ def default_annexure_template() -> BytesIO:
 
 def default_purchase_annexure_template() -> BytesIO:
     # Keep your local template path as you had
-    df = pd.read_excel(r"C:\Users\subhanjan.nandy\Downloads\Annexure Fromat Excel.xlsx")
+    df = pd.read_excel(r"Purchase_Agreement_Annexure_Fromat_Excel.xlsx")
     out = BytesIO()
     with pd.ExcelWriter(out, engine="xlsxwriter") as writer:
         df.to_excel(writer, index=False, sheet_name="Annexure")
