@@ -3,17 +3,25 @@ from io import BytesIO
 from docx import Document
 from docx.shared import Pt, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.text import WD_BREAK
+from docx.enum.text import WD_TAB_ALIGNMENT
+from docx.enum.text import WD_TAB_LEADER
+from docx.enum.section import WD_SECTION
+from docx.oxml.ns import qn
+from docx.oxml import OxmlElement
 import pandas as pd
 from datetime import datetime
 from streamlit_quill import st_quill
-import openpyxl
-import re  # <-- for stripping HTML before writing to .docx
+import re
 
 # =========================
 # CLAUSES LIBRARIES
 # =========================
 CLAUSES_NDA = {
-    1: """1. In this Agreement except where the context otherwise requires:
+    #removing all the serial numbers. 
+1: """1. Agreement Terminologies: 
+    
+In this Agreement except where the context otherwise requires:
 
 (a) In this Agreement the terms listed below shall have the following meanings:
 
@@ -38,8 +46,12 @@ d) any other information obtained from the Receiving Party and/or its Representa
 “Receiving Party”, shall mean ______________ including its  officers, agents and other persons engaged by the Company for the purpose of this agreement.
 
 “Third Party” shall mean any Person other than the Receiving Party or Disclosing Party not being a Party to this Agreement.""",
-    2: """2. The Receiving Party agrees that all written information disclosed by the Disclosing Party Group pursuant to this Agreement shall be considered Confidential Information, unless otherwise specified in writing by the Disclosing Party. By executing this Agreement, the Receiving Party acknowledges that the Disclosing Party derives independent economic value from the Confidential Information not being generally known and that the disclosure of the Confidential Information is subject to the Receiving Party keeping such information in confidence. The Receiving Party shall inform each of its Representatives to whom it intends to disclose Confidential Information in accordance with this Agreement that the obligations imposed on the Disclosing Party in relation to the Confidential Information shall apply in the same manner to such Representatives.""",
-    3: """3. Non-disclosure Obligations. The Receiving Party shall utilize the Confidential Information provided by any Disclosing Party Group member exclusively for the Business Purpose and shall not disclose, publish or disseminate (except with the prior written consent of the Disclosing Party) any Confidential Information to any Third Party other than its Representatives and such other persons whom the Disclosing Party grants its express written consent for disclosure of Confidential Information, who shall be necessarily required to possess such Confidential Information in order for the Receiving Party to fulfil the Business Purpose. Without limiting the generality of the foregoing, the Receiving Party shall, and shall procure and ensure that each of its Representatives to whom the Receiving Party discloses any Confidential Information in accordance with this Agreement shall:
+
+2: """2. Receiving Party Agreement: The Receiving Party agrees that all written information disclosed by the Disclosing Party Group pursuant to this Agreement shall be considered Confidential Information, unless otherwise specified in writing by the Disclosing Party. By executing this Agreement, the Receiving Party acknowledges that the Disclosing Party derives independent economic value from the Confidential Information not being generally known and that the disclosure of the Confidential Information is subject to the Receiving Party keeping such information in confidence. The Receiving Party shall inform each of its Representatives to whom it intends to disclose Confidential Information in accordance with this Agreement that the obligations imposed on the Disclosing Party in relation to the Confidential Information shall apply in the same manner to such Representatives.""",
+
+3: """3. Non-disclosure Obligations: 
+
+The Receiving Party shall utilize the Confidential Information provided by any Disclosing Party Group member exclusively for the Business Purpose and shall not disclose, publish or disseminate (except with the prior written consent of the Disclosing Party) any Confidential Information to any Third Party other than its Representatives and such other persons whom the Disclosing Party grants its express written consent for disclosure of Confidential Information, who shall be necessarily required to possess such Confidential Information in order for the Receiving Party to fulfil the Business Purpose. Without limiting the generality of the foregoing, the Receiving Party shall, and shall procure and ensure that each of its Representatives to whom the Receiving Party discloses any Confidential Information in accordance with this Agreement shall:
 
 A. Hold such Confidential Information in strict confidence and take commercially reasonable precautions and adequate measures to protect and safeguard the Confidential Information against unauthorized use, publication or disclosure.
 
@@ -48,15 +60,24 @@ B. Not use any of the Confidential Information except in furtherance of the Busi
 C. Not, directly or indirectly, in any way, disclose any of the Confidential Information to any person except as specifically authorized by the Disclosing Party in accordance with this Agreement.
 
 Restrict the access to all Confidential Information by the Representatives on a strictly “need to know” basis for the performance of their duties in furtherance of the Business Purpose.""",
-    4: """4. Exceptions. The confidentiality obligations hereunder shall not apply to Confidential Information which (i) is or later becomes public knowledge, except as a result of any unauthorised disclosure by the Receiving Party or its Representatives pursuant to this Agreement; or (ii) was rightfully in possession of the Receiving Party or its Representatives, on a non-confidential basis, prior to its receipt thereof from any Disclosing Party Group member as can be reasonably demonstrated by the Receiving Party via written records, or (iii) is independently developed by the Receiving Party or its Representatives without the use of any Confidential Information as can be reasonably demonstrated by the Receiving Party via written records.""",
-    5: """5. Return of Confidential Information. Upon the written request of the Disclosing Party or termination of this Agreement, whichever is the earlier, the Receiving Party shall, and shall procure and ensure that each of its Representatives shall, within 14 days thereafter deliver to the Disclosing Party all records, notes, and other written, printed, or tangible materials either in soft or hard copy form which is in the possession of the Receiving Party or its Representatives, embodying or pertaining to the Confidential Information. The Receiving Party shall promptly notify the Disclosing Party following completion of the foregoing obligation. Notwithstanding the foregoing, the Receiving Party and its Representatives (i) may retain copies of the Confidential Information to the extent that such retention is required to demonstrate compliance with applicable law, rule, regulation or professional standards, or to comply with a bona fide document retention policy, provided, however, that any such information so retained shall be held in compliance with the terms of this Agreement for a period of 7 (seven) years from the date of this Agreement and (ii) shall, to the extent that (i) above is inapplicable to Confidential Information that is electronically stored, destroy such electronically stored Confidential Information only.""",
-    6: """6. Unpublished Price Sensitive Information. The Receiving Party acknowledges that, in connection with and in furtherance of the Proposed Transaction, the Receiving Party may receive Confidential Information which may contain unpublished price sensitive information (UPSI) as defined under the SEBI (Prohibition of Insider Trading) Regulations, 2015, as amended from time to time. Each Party represents that it is aware of the securities laws prevalent in India, including the SEBI (Prohibition of Insider Trading) Regulations, 2015, as amended from time to time and the respective parties shall be responsible for compliance with such laws in respect of receipt and use of UPSI.""",
-    7: """7. No Representation or Warranty. Except as maybe provided in a definitive agreement between the Parties in connection with the Proposed Transaction, the Disclosing Party does not make any representation or warranty as to the accuracy or completeness of the Confidential Information or of any other information provided, or as to the reasonableness of any assumptions on which any of the same is based, to the Receiving Party or its Representatives, and accordingly, the Receiving Party agrees that the Disclosing Party Group and any of its directors, officers, employees, advisers or agents shall have no liability towards the Receiving Party which may result from the Receiving Party’s unauthorized, use, disclosure or possession of the Confidential Information nor for any claims of Third Parties or as a result of their reliance on any Confidential Information nor for any opinions, projections or forecasts expressed or made by them nor for any errors, omissions or mis-statements made by any of them, and agrees that the Confidential Information is subject to change without notice at any time. In furnishing any Confidential Information no obligation is undertaken by the Disclosing Party to provide any additional information.""",
-    8: """8. No grant of any right, title, or interest in the Confidential Information. The Confidential Information, including without limitation any patents, copyrights, trademarks, or other intellectual property rights (present or future) in such Confidential Information, shall at all times remain the sole and exclusive property of the Disclosing Party Group. In no situation whatsoever, shall the Receiving Party have any title, right, interest, or claim over such Confidential Information.""",
-    9: """9. Compelled Disclosure. Pursuant to any Applicable Law, if the Receiving Party or any of its Representatives receives any notice or order by any judicial, Governmental Authority or regulatory entity to disclose any or all Confidential Information, then the Receiving Party shall, and shall procure that such Representatives shall, (to the extent permitted by Applicable Law) make reasonable efforts to promptly notify the Disclosing Party so that the Disclosing Party has the opportunity to intercede and contest such disclosure and the Receiving Party shall, and shall procure that such Representatives shall, wherever reasonably required, cooperate with the Disclosing Party in contesting such a disclosure. The Receiving Party shall, and shall procure that such Representatives, furnish only such part of the Confidential Information that the Receiving Party or such Representatives are legally compelled to disclose to the extent legally permissible.""",
-    10: """10. No Trade Obligation: Notwithstanding anything contained in this Agreement, the Receiving Party agrees that neither the Receiving Party or its Affiliates shall acquire any interest (whether economic or otherwise) in the Company, other than by way of the Proposed Transaction, for a period of 6 (six) months from the date of this Agreement.""",
-    11: """11. Losses. The prevailing Party in any dispute between the Parties shall be entitled to recover its reasonable costs and expenses (including their attorney’s fees and costs) in connection with such action.""",
-    12: """12. Notices: Any notice, request or instruction to be given hereunder by any Party to the other Party shall be in writing, in English language and delivered personally, or sent by registered mail postage prepaid or courier or electronic mail addressed to the concerned Party at the address set forth below or any other address subsequently notified to the other Parties.
+
+4: """4. Exceptions:  The confidentiality obligations hereunder shall not apply to Confidential Information which (i) is or later becomes public knowledge, except as a result of any unauthorised disclosure by the Receiving Party or its Representatives pursuant to this Agreement; or (ii) was rightfully in possession of the Receiving Party or its Representatives, on a non-confidential basis, prior to its receipt thereof from any Disclosing Party Group member as can be reasonably demonstrated by the Receiving Party via written records, or (iii) is independently developed by the Receiving Party or its Representatives without the use of any Confidential Information as can be reasonably demonstrated by the Receiving Party via written records.""",
+
+5: """5. Return of Confidential Information: Upon the written request of the Disclosing Party or termination of this Agreement, whichever is the earlier, the Receiving Party shall, and shall procure and ensure that each of its Representatives shall, within 14 days thereafter deliver to the Disclosing Party all records, notes, and other written, printed, or tangible materials either in soft or hard copy form which is in the possession of the Receiving Party or its Representatives, embodying or pertaining to the Confidential Information. The Receiving Party shall promptly notify the Disclosing Party following completion of the foregoing obligation. Notwithstanding the foregoing, the Receiving Party and its Representatives (i) may retain copies of the Confidential Information to the extent that such retention is required to demonstrate compliance with applicable law, rule, regulation or professional standards, or to comply with a bona fide document retention policy, provided, however, that any such information so retained shall be held in compliance with the terms of this Agreement for a period of 7 (seven) years from the date of this Agreement and (ii) shall, to the extent that (i) above is inapplicable to Confidential Information that is electronically stored, destroy such electronically stored Confidential Information only.""",
+
+6: """6. Unpublished Price Sensitive Information: The Receiving Party acknowledges that, in connection with and in furtherance of the Proposed Transaction, the Receiving Party may receive Confidential Information which may contain unpublished price sensitive information (UPSI) as defined under the SEBI (Prohibition of Insider Trading) Regulations, 2015, as amended from time to time. Each Party represents that it is aware of the securities laws prevalent in India, including the SEBI (Prohibition of Insider Trading) Regulations, 2015, as amended from time to time and the respective parties shall be responsible for compliance with such laws in respect of receipt and use of UPSI.""",
+
+7: """7. No Representation or Warranty: Except as maybe provided in a definitive agreement between the Parties in connection with the Proposed Transaction, the Disclosing Party does not make any representation or warranty as to the accuracy or completeness of the Confidential Information or of any other information provided, or as to the reasonableness of any assumptions on which any of the same is based, to the Receiving Party or its Representatives, and accordingly, the Receiving Party agrees that the Disclosing Party Group and any of its directors, officers, employees, advisers or agents shall have no liability towards the Receiving Party which may result from the Receiving Party’s unauthorized, use, disclosure or possession of the Confidential Information nor for any claims of Third Parties or as a result of their reliance on any Confidential Information nor for any opinions, projections or forecasts expressed or made by them nor for any errors, omissions or mis-statements made by any of them, and agrees that the Confidential Information is subject to change without notice at any time. In furnishing any Confidential Information no obligation is undertaken by the Disclosing Party to provide any additional information.""",
+
+8: """8. No grant of any right, title, or interest in the Confidential Information: The Confidential Information, including without limitation any patents, copyrights, trademarks, or other intellectual property rights (present or future) in such Confidential Information, shall at all times remain the sole and exclusive property of the Disclosing Party Group. In no situation whatsoever, shall the Receiving Party have any title, right, interest, or claim over such Confidential Information.""",
+
+9: """9. Compelled Disclosure: Pursuant to any Applicable Law, if the Receiving Party or any of its Representatives receives any notice or order by any judicial, Governmental Authority or regulatory entity to disclose any or all Confidential Information, then the Receiving Party shall, and shall procure that such Representatives shall, (to the extent permitted by Applicable Law) make reasonable efforts to promptly notify the Disclosing Party so that the Disclosing Party has the opportunity to intercede and contest such disclosure and the Receiving Party shall, and shall procure that such Representatives shall, wherever reasonably required, cooperate with the Disclosing Party in contesting such a disclosure. The Receiving Party shall, and shall procure that such Representatives, furnish only such part of the Confidential Information that the Receiving Party or such Representatives are legally compelled to disclose to the extent legally permissible.""",
+
+10: """10. No Trade Obligation: Notwithstanding anything contained in this Agreement, the Receiving Party agrees that neither the Receiving Party or its Affiliates shall acquire any interest (whether economic or otherwise) in the Company, other than by way of the Proposed Transaction, for a period of 6 (six) months from the date of this Agreement.""",
+
+11: """11. Losses: The prevailing Party in any dispute between the Parties shall be entitled to recover its reasonable costs and expenses (including their attorney’s fees and costs) in connection with such action.""",
+
+12: """12. Notices: Any notice, request or instruction to be given hereunder by any Party to the other Party shall be in writing, in English language and delivered personally, or sent by registered mail postage prepaid or courier or electronic mail addressed to the concerned Party at the address set forth below or any other address subsequently notified to the other Parties.
 
 Company: 
 Address:         RPSG House, 2/4, Judges Court Road,
@@ -70,19 +91,32 @@ Attention: Mr.  [•]
 Email Address:  [•]
 
 Any notice, request or instruction: (i) sent by email, shall be deemed received when sent; (ii) sent by hand, shall be deemed received when delivered; or (iii) sent by post, shall be deemed received 48 hours after posting.""",
-    13: """13. Counterparts. This Agreement may be executed in two counterparts, each of which shall be deemed an original, but all of which together shall constitute one and the same instrument.""",
-    14: """14. Term and Termination. If either Party decides not to proceed with the Business Purpose with the other Party, it shall notify the other Party in writing immediately (such notice, a “Termination Notice”). This Agreement shall commence on the Execution Date and remain in full effect until earlier of: (a) execution and delivery of the definitive agreements regarding the Proposed Transaction; or (b) 24 months from the Execution Date.""",
-    15: """15. Remedies. The Receiving Party understands and acknowledges that any disclosure or misappropriation of any of the Confidential Information in violation of this Agreement may cause the Disclosing Party Group irreparable harm, the amount of which may be difficult to ascertain and, therefore, agrees that the Disclosing Party shall have the right to apply to a court of competent jurisdiction for an order restraining any such further disclosure or misappropriation and for such other relief as the Disclosing Party shall deem appropriate. Such right of the Disclosing Party shall be in addition to any other remedies available to the Disclosing Party at law or in equity.""",
-    16: """16. Non-Disclosure by the Company. Except as required by law, regulation, legal process or any court order, without the Receiving Party prior written consent, the Company and its respective Representatives shall not, directly or indirectly, identify the Receiving Party or its affiliates by name or identifiable description as being involved in discussions or negotiations concerning the Proposed Transaction, or disclose any of the terms, conditions, work product or analysis prepared or submitted by the Receiving Party in connection therewith, to any person other than a Representative of the Company who reasonably requires access to such information in connection with the Proposed Transaction.""",
-    17: """17. Entire Agreement. This Agreement embodies the entire understanding between the Parties relating to the subject matter of this Agreement and supersedes any and all prior negotiations, correspondence, understandings and agreements between the Parties relating to the subject matter of this Agreement. This Agreement shall not be modified except by a writing duly executed by authorized representatives of all Parties. Should any provision of this Agreement be found unenforceable, such provision or part thereof, to the minimum extent required, shall be deemed to be deleted from this Agreement and the validity and enforceability of the remainder of this Agreement shall still be in effect.""",
-    18: """18. No Waiver. The failure of the Disclosing Party to require performance by the Receiving Party of any provision of this Agreement shall in no way effect the full right to require such performance at any time thereafter.""",
-    19: """19. Assignment. The Receiving Party shall have no right to assign or otherwise transfer, in whole or in part, any of its rights or obligations under this Agreement without obtaining prior written consent from the Disclosing Party.""",
-    20: """20. Third Party Rights. Except as expressly provided in this Agreement, no Third Party shall have any right to enforce any term of this Agreement.""",
-    21: """21. Governing Law. This Agreement shall be governed by and construed in accordance with the laws of India, without regard to its choice of law provisions and the Courts in Kolkata, India shall have non-exclusive jurisdiction over any dispute hereunder.""",
-    22: """22. Amendment. This Agreement constitutes the sole understanding of the Parties about this subject matter and may not be amended or modified except in writing signed by each of the Parties to the Agreement."""
+
+13: """13. Counterparts: This Agreement may be executed in two counterparts, each of which shall be deemed an original, but all of which together shall constitute one and the same instrument.""",
+
+14: """14. Term and Termination:
+
+If either Party decides not to proceed with the Business Purpose with the other Party, it shall notify the other Party in writing immediately (such notice, a “Termination Notice”). This Agreement shall commence on the Execution Date and remain in full effect until earlier of: (a) execution and delivery of the definitive agreements regarding the Proposed Transaction; or (b) 24 months from the Execution Date.""",
+
+15: """15. Remedies: The Receiving Party understands and acknowledges that any disclosure or misappropriation of any of the Confidential Information in violation of this Agreement may cause the Disclosing Party Group irreparable harm, the amount of which may be difficult to ascertain and, therefore, agrees that the Disclosing Party shall have the right to apply to a court of competent jurisdiction for an order restraining any such further disclosure or misappropriation and for such other relief as the Disclosing Party shall deem appropriate. Such right of the Disclosing Party shall be in addition to any other remedies available to the Disclosing Party at law or in equity.""",
+
+16: """16. Non-Disclosure by the Company: Except as required by law, regulation, legal process or any court order, without the Receiving Party prior written consent, the Company and its respective Representatives shall not, directly or indirectly, identify the Receiving Party or its affiliates by name or identifiable description as being involved in discussions or negotiations concerning the Proposed Transaction, or disclose any of the terms, conditions, work product or analysis prepared or submitted by the Receiving Party in connection therewith, to any person other than a Representative of the Company who reasonably requires access to such information in connection with the Proposed Transaction.""",
+
+17: """17. Entire Agreement: This Agreement embodies the entire understanding between the Parties relating to the subject matter of this Agreement and supersedes any and all prior negotiations, correspondence, understandings and agreements between the Parties relating to the subject matter of this Agreement. This Agreement shall not be modified except by a writing duly executed by authorized representatives of all Parties. Should any provision of this Agreement be found unenforceable, such provision or part thereof, to the minimum extent required, shall be deemed to be deleted from this Agreement and the validity and enforceability of the remainder of this Agreement shall still be in effect.""",
+
+18: """18. No Waiver: The failure of the Disclosing Party to require performance by the Receiving Party of any provision of this Agreement shall in no way effect the full right to require such performance at any time thereafter.""",
+
+19: """19. Assignment: The Receiving Party shall have no right to assign or otherwise transfer, in whole or in part, any of its rights or obligations under this Agreement without obtaining prior written consent from the Disclosing Party.""",
+
+20: """20. Third Party Rights: Except as expressly provided in this Agreement, no Third Party shall have any right to enforce any term of this Agreement.""",
+
+21: """21. Governing Law: This Agreement shall be governed by and construed in accordance with the laws of India, without regard to its choice of law provisions and the Courts in Kolkata, India shall have non-exclusive jurisdiction over any dispute hereunder.""",
+
+22: """22. Amendment: This Agreement constitutes the sole understanding of the Parties about this subject matter and may not be amended or modified except in writing signed by each of the Parties to the Agreement."""
 }
 
 # 21 CLAUSES for PURCHASE AGREEMENT (grouped exactly as your draft)
+
 CLAUSES_PA = {
     1: """1. DEFINITIONS:
 
@@ -312,31 +346,19 @@ NOW THEREFORE THIS AGREEMENT WITNESSETH AS FOLLOWS:
 """
 
 # ------------------------------------------------
-# 2) HELPERS
+# Helpers: highlights and minimal HTML-ish formatting
 # ------------------------------------------------
-def docx_from_plain_text(plain_text: str, title: str = None) -> BytesIO:
-    doc = Document()
-    for s in doc.sections:
-        s.top_margin = Inches(1)
-        s.bottom_margin = Inches(1)
-        s.left_margin = Inches(1)
-        s.right_margin = Inches(1)
 
-    if title:
-        h = doc.add_paragraph()
-        run = h.add_run(title)
-        run.bold = True
-        h.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        h.runs[0].font.size = Pt(16)
-        doc.add_paragraph("")
+#this function was made so that if duplicate columns are present in the annexure table made using word mode, then the code doesn't crash or throw any errors. (since by default streamlit pyarrow enforces unique column names.)
+def render_table(header, body):
+    table_html = "<table style='border-collapse: collapse; width: 100%;'>"
+    if header:
+        table_html += "<tr>" + "".join([f"<th style='border: 1px solid #ddd; padding: 6px;'>{h}</th>" for h in header]) + "</tr>"
+    for row in body:
+        table_html += "<tr>" + "".join([f"<td style='border: 1px solid #ddd; padding: 6px;'>{c}</td>" for c in row]) + "</tr>"
+    table_html += "</table>"
+    st.markdown(table_html, unsafe_allow_html=True)
 
-    for block in plain_text.split("\n"):
-        doc.add_paragraph(block)
-
-    buf = BytesIO()
-    doc.save(buf)
-    buf.seek(0)
-    return buf
 
 def add_heading(doc: Document, text: str, size: int = 16, center=True):
     p = doc.add_paragraph()
@@ -346,33 +368,252 @@ def add_heading(doc: Document, text: str, size: int = 16, center=True):
     if center:
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-def compose_full_contract(preamble: str, clause_texts: list, parties: list, annexure_note: str) -> str:
-    body = [preamble.strip(), ""]
-    for t in clause_texts:
-        body.append(t.strip())
-        body.append("")
-    if parties:
-        body.append("PARTIES")
-        for idx, p in enumerate(parties, 1):
-            body.append(f"{idx}. {p}")
-        body.append("")
-    if annexure_note:
-        body.append("ANNEXURE")
-        body.append(annexure_note)
-        body.append("")
-    return "\n".join(body)
+def _regex_parts_for_terms(terms):
+    """Build a regex that finds the longest non-empty terms safely."""
+    clean = [t for t in (terms or []) if isinstance(t, str) and t.strip()]
+    # sort by length desc to avoid partial matches eating bigger ones
+    clean = sorted(set(clean), key=len, reverse=True)
+    if not clean:
+        return None
+    escaped = [re.escape(t) for t in clean]
+    return re.compile("(" + "|".join(escaped) + ")", flags=re.IGNORECASE)
 
-# --- helper to strip HTML tags for docx writing (keeps export clean even if clauses come from Quill) ---
-def strip_html(x: str) -> str:
-    return re.sub(r"<[^>]+>", "", x or "")
+def highlight_placeholders(text, mapping):
+    """Highlight only values that replaced placeholders."""
+    if not text:
+        return text
+    for key, val in mapping.items():
+        if val and isinstance(val, str) and val.strip():
+            text = text.replace(val, f"<u><mark>{val}</mark></u>")
+    return text
+
+def write_with_highlight(paragraph, text: str, highlight_terms):
+    """
+    Write text into a docx paragraph. Any appearance of terms is
+    underlined + highlighted. Other text is normal.
+    """
+    if not text:
+        return
+    if not highlight_terms:
+        paragraph.add_run(text)
+        return
+    rx = _regex_parts_for_terms(highlight_terms)
+    if not rx:
+        paragraph.add_run(text)
+        return
+
+    pos = 0
+    for m in rx.finditer(text):
+        if m.start() > pos:
+            paragraph.add_run(text[pos:m.start()])
+        r = paragraph.add_run(m.group(0))
+        r.underline = True
+        r.font.highlight_color = 7  # 7 = yellow
+        pos = m.end()
+    if pos < len(text):
+        paragraph.add_run(text[pos:])
+
+def htmlish_to_blocks(html: str) -> list:
+    """
+    Convert a small subset of Quill HTML into a list of blocks with structure:
+    [{"type": "p"|"ul"|"ol", "items":[{"text":"...", "level":0}, ...]}] or {"type":"p","text":...}
+    Supports <p>, <br>, <strong>/<b>, <em>/<i> (lost as plain text for DOCX),
+    <ul><li>, <ol type="a|1|i"><li>. Nested lists become level>0.
+    """
+    if not html:
+        return []
+
+    s = html
+    # normalize line breaks
+    s = s.replace("\r", "")
+    s = re.sub(r"<br\s*/?>", "\n", s, flags=re.I)
+    # strip spans but keep inner text
+    s = re.sub(r"</?span[^>]*>", "", s, flags=re.I)
+    # extract lists
+    blocks = []
+
+    # naive splitting on major list/p blocks
+    tokens = re.split(r"(?i)(</?ul>|</?ol[^>]*>|</?p>)", s)
+
+    mode = None   # 'ul', 'ol', 'p'
+    list_type = "1"  # for <ol> type; default numeric
+    pending_items = []
+
+    def flush_list():
+        nonlocal pending_items, list_type
+        if pending_items:
+            blocks.append({"type": mode, "list_type": list_type, "items": pending_items[:]})
+            pending_items = []
+
+    for tok in tokens:
+        if tok is None or tok == "":
+            continue
+        tag = tok.strip().lower()
+
+        # opening tags
+        if tag.startswith("<ul"):
+            # flush previous
+            if mode == "ol":
+                flush_list()
+            mode = "ul"
+            pending_items = []
+            continue
+        if tag.startswith("</ul"):
+            if mode == "ul":
+                flush_list()
+            mode = None
+            continue
+
+        if tag.startswith("<ol"):
+            # detect type
+            m = re.search(r'type\s*=\s*"([aAiI1])"', tok)
+            list_type = m.group(1) if m else "1"
+            if mode == "ul":
+                flush_list()
+            mode = "ol"
+            pending_items = []
+            continue
+        if tag.startswith("</ol"):
+            if mode == "ol":
+                flush_list()
+            mode = None
+            list_type = "1"
+            continue
+
+        if tag == "<p>":
+            if mode in ("ul", "ol"):
+                # treat paragraph inside list as item with level 0
+                continue
+            mode = "p"
+            continue
+        if tag == "</p>":
+            mode = None
+            continue
+
+        # content
+        content = tok
+
+        # <li> items
+        li_splits = re.split(r"(?i)</?li[^>]*>", content)
+        if len(li_splits) > 1 and mode in ("ul", "ol"):
+            # build items from inner text
+            for piece in li_splits:
+                piece = piece.strip()
+                if not piece:
+                    continue
+                # naive nesting level by counting <ul> / <ol> inside (rare with Quill blocks)
+                level = len(re.findall(r"(?i)<ul|<ol", piece))
+                # strip remaining tags
+                txt = re.sub(r"<[^>]+>", "", piece).strip()
+                if txt:
+                    pending_items.append({"text": txt, "level": level})
+            continue
+
+        # a raw text while in paragraph
+        if mode == "p":
+            txt = re.sub(r"<[^>]+>", "", content).strip()
+            if txt:
+                blocks.append({"type": "p", "text": txt})
+            continue
+
+        # outside any tag: plain text
+        fallback = re.sub(r"<[^>]+>", "", content).strip()
+        if fallback:
+            blocks.append({"type": "p", "text": fallback})
+
+    return blocks
+
+def add_blocks_to_doc(doc: Document, html_text: str, highlight_terms):
+    """
+    Add converted blocks into docx with numbering/bullets and indent.
+    """
+    blocks = htmlish_to_blocks(html_text or "")
+    if not blocks:
+        return
+
+    # counters for ordered lists per level
+    ol_counters = {}
+
+    for b in blocks:
+        if b["type"] == "p":
+            p = doc.add_paragraph()
+            write_with_highlight(p, b["text"], highlight_terms)
+            continue
+
+        if b["type"] in ("ul", "ol"):
+            list_type = b.get("list_type", "1")
+            ol_counters = {}
+
+            for it in b.get("items", []):
+                level = min(int(it.get("level", 0)), 3)
+                p = doc.add_paragraph()
+                # indent via left indentation (approx 0.5" per level)
+                p.paragraph_format.left_indent = Inches(0.5 * level)
+
+                # marker
+                if b["type"] == "ul":
+                    marker = "• "
+                else:
+                    # ordered list
+                    idx = ol_counters.get(level, 0) + 1
+                    ol_counters[level] = idx
+                    if list_type in ("a", "A"):
+                        base = chr(ord('a') + (idx - 1))
+                        marker = f"({base if list_type=='a' else base.upper()}) "
+                    elif list_type in ("i", "I"):
+                        # simple roman up to 12
+                        romans = ["i","ii","iii","iv","v","vi","vii","viii","ix","x","xi","xii"]
+                        rm = romans[idx-1] if 1 <= idx <= len(romans) else str(idx)
+                        marker = f"{rm if list_type=='i' else rm.upper()}. "
+                    else:
+                        marker = f"{idx}. "
+
+                run_m = p.add_run(marker)
+                run_m.bold = False
+                write_with_highlight(p, it["text"], highlight_terms)
+
+# ------------------------------------------------
+# DOCX builder with sections + clause titles + highlighted inputs
+# ------------------------------------------------
+def extract_title_from_clause(text: str) -> str:
+    """
+    Extract a short title for dropdowns:
+    - If clause starts with 'N. TITLE: ...' or 'TITLE:' → use before colon.
+    - Else → return everything up to the first full stop (.)
+    """
+    t = re.sub(r"<[^>]+>", "", (text or "")).strip()
+    if not t:
+        return "Clause"
+
+    first_line = t.splitlines()[0]
+
+    # If contains colon, take before colon
+    if ":" in first_line:
+        head = first_line.split(":", 1)[0].strip()
+        return head
+
+    # If starts with number and a dot, strip the number
+    m = re.match(r"^\s*\d+\.\s*(.+)$", first_line)
+    if m:
+        first_line = m.group(1).strip()
+
+    # Stop at first full stop if present
+    if "." in first_line:
+        return first_line.split(".", 1)[0].strip()
+
+    # Fallback: whole line
+    return first_line.strip()
+
+#so now the NDA dropdown text in the box will only have some words instead of the whole clause. 
 
 def build_docx(
-    preamble: str,
-    clause_texts: list,
-    parties: list,
-    annexure_note: str,
+    preamble_html: str,
+    clauses_dict: dict[int, str],
+    custom_clauses: list[dict],
+    parties: list[str],
+    annexures: list[dict],
     title="AGREEMENT",
-    annexure_file=None
+    highlight_terms: list[str] | None = None
 ) -> BytesIO:
     doc = Document()
     for s in doc.sections:
@@ -381,98 +622,120 @@ def build_docx(
         s.left_margin = Inches(1)
         s.right_margin = Inches(1)
 
+    # Title
     add_heading(doc, title.upper(), 18, True)
-    doc.add_paragraph(strip_html(preamble.strip()))
+    # Preamble
+    add_blocks_to_doc(doc, preamble_html, highlight_terms)
     doc.add_paragraph("")
 
-    for t in clause_texts:
-        p = doc.add_paragraph()
-        ts = strip_html(t.strip())
-        if len(ts) >= 2 and ts[:2].isdigit() and "." in ts[:5]:
-            first_line = ts.split("\n", 1)[0]
-            run = p.add_run(first_line)
-            run.bold = True
-            remainder = ts[len(first_line):]
-            if remainder:
-                doc.add_paragraph(remainder)
-        else:
-            p.add_run(ts)
+    # Sections (standard clauses)
+    for key in sorted(clauses_dict.keys()):
+        cl_html = clauses_dict[key]
+        # Skip this logic for the body, just add the raw blocks
+        add_blocks_to_doc(doc, cl_html, highlight_terms)
         doc.add_paragraph("")
 
-    if parties:
-        add_heading(doc, "PARTIES", 14, False)
-        for idx, ptxt in enumerate(parties, 1):
-            doc.add_paragraph(f"{idx}. {strip_html(ptxt)}")
-
-    if annexure_note:
-        doc.add_paragraph("")
-        add_heading(doc, "ANNEXURE", 14, False)
-        doc.add_paragraph(strip_html(annexure_note))
-
-    if annexure_file is not None:
-        try:
-            df = pd.read_excel(annexure_file)
-            doc.add_page_break()
-            add_heading(doc, "ANNEXURE – DETAILS", 14, True)
-            table = doc.add_table(rows=1, cols=len(df.columns))
-            table.style = "Table Grid"
-            hdr_cells = table.rows[0].cells
-            for j, col in enumerate(df.columns):
-                hdr_cells[j].text = str(col)
-            for _, row in df.iterrows():
-                row_cells = table.add_row().cells
-                for j, val in enumerate(row):
-                    row_cells[j].text = "" if pd.isna(val) else str(val)
-        except Exception as e:
+    # Custom clauses (if any)
+    if custom_clauses:
+        start_num = len(clauses_dict) + 1
+        for idx, c in enumerate(custom_clauses, start=start_num):
+            t = f"{idx}. {c.get('title', 'Custom Clause')}"
+            p = doc.add_paragraph()
+            rr = p.add_run(t)
+            rr.bold = True
+            rr.font.size = Pt(12)
+            add_blocks_to_doc(doc, c.get("text",""), highlight_terms)
             doc.add_paragraph("")
-            doc.add_paragraph(f"[Annexure could not be inserted: {e}]")
+
+    # Parties
+    if parties:
+        doc.add_paragraph()
+        add_heading(doc, "PARTIES", 14, False)
+        for i, ptxt in enumerate(parties, 1):
+            p = doc.add_paragraph()
+            write_with_highlight(p, f"{i}. {ptxt}", highlight_terms)
+
+    # Multiple Annexures
+    if annexures:
+        for i, annex in enumerate(annexures):
+            doc.add_page_break()
+            annex_title = annex.get("title", f"ANNEXURE {i+1}")
+            add_heading(doc, annex_title.upper(), 14, True)
+
+            # Annexure note
+            annex_note = annex.get("note")
+            if annex_note:
+                p = doc.add_paragraph()
+                write_with_highlight(p, annex_note, highlight_terms)
+                doc.add_paragraph("")  # spacing
+
+            # Annexure Excel data
+            annexure_excel = annex.get("excel_data")
+            df = None
+            if annexure_excel is not None:
+                try:
+                    annexure_excel.seek(0)
+                    df = pd.read_excel(annexure_excel)
+                except Exception as e:
+                    df = None
+                    doc.add_paragraph(f"[{annex_title} (Excel) could not be read: {e}]")
+            if df is not None:
+                table = doc.add_table(rows=1, cols=len(df.columns))
+                table.style = "Table Grid"
+                hdr = table.rows[0].cells
+                for j, c in enumerate(df.columns):
+                    hdr[j].text = str(c)
+                for _, row in df.iterrows():
+                    row_cells = table.add_row().cells
+                    for j, val in enumerate(row):
+                        row_cells[j].text = "" if pd.isna(val) else str(val)
+
+            # Annexure Word table data
+            annexure_word_rows = annex.get("word_data")
+            if annexure_word_rows:
+                if df is not None:
+                    doc.add_paragraph("")  # spacing between tables
+                maxc = max((len(r) for r in annexure_word_rows), default=0)
+                if maxc > 0:
+                    table2 = doc.add_table(rows=0, cols=maxc)
+                    table2.style = "Table Grid"
+                    for r in annexure_word_rows:
+                        cells = table2.add_row().cells
+                        for j in range(maxc):
+                            cells[j].text = (r[j] if j < len(r) else "") or ""
 
     buf = BytesIO()
     doc.save(buf)
     buf.seek(0)
     return buf
 
-def default_annexure_template() -> BytesIO:
-    df = pd.DataFrame(
-        columns=["S.No", "Item/Deliverable", "Description", "Quantity", "Unit Price", "Total", "Remarks"]
-    )
-    out = BytesIO()
-    with pd.ExcelWriter(out, engine="xlsxwriter") as writer:
-        df.to_excel(writer, index=False, sheet_name="Annexure")
-    out.seek(0)
-    return out
-
-def default_purchase_annexure_template() -> BytesIO:
-    # Keep your local template path as you had
-    df = pd.read_excel(r"Purchase_Agreement_Annexure_Fromat_Excel.xlsx")
-    out = BytesIO()
-    with pd.ExcelWriter(out, engine="xlsxwriter") as writer:
-        df.to_excel(writer, index=False, sheet_name="Annexure")
-    out.seek(0)
-    return out
-
-def df_for_display(df: pd.DataFrame) -> pd.DataFrame:
-    # Ensure blanks stay blanks (no None)
-    out = df.copy()
-    out = out.astype(object)
-    out = out.where(pd.notnull(out), "")
-    out = out.replace({None: ""})
-    return out
-
-def df_for_save(df: pd.DataFrame, numeric_cols: list[str] | None = None) -> pd.DataFrame:
-    out = df.copy()
-    out = out.replace("", pd.NA)
-    if numeric_cols:
-        for col in numeric_cols:
-            if col in out.columns:
-                out[col] = pd.to_numeric(out[col], errors="coerce")
-    return out
-
 # ------------------------------------------------
-# 3) STREAMLIT APP
+# Streamlit App
 # ------------------------------------------------
 st.set_page_config(page_title="Interactive Contract Generator", page_icon="📄", layout="wide")
 st.title("📄 Interactive Contract Generator")
+
+# Top-level role toggle
+if "role" not in st.session_state:
+    st.session_state.role = None  # or set "admin" if you want to default to Admin
+
+btn_admin, btn_business = st.columns(2)
+if btn_admin.button("👤 ADMIN Users", type="primary", use_container_width=True, key="btn_admin"):
+    st.session_state.role = "admin"
+    st.rerun()
+
+if btn_business.button("🏢 BUSINESS Users", use_container_width=True, key="btn_business"):
+    st.session_state.role = "business"
+    st.rerun()
+
+# Gate the rest of the app
+if st.session_state.role == "business":
+    # blank inside (only the two buttons at the top remain visible)
+    st.write("")  # keep it truly blank for now
+    st.stop()
+
+# If role is None or "admin", the app proceeds as usual below…
+# ==== END OF INSERT ====
 
 # GLOBAL STATE
 if "workflow" not in st.session_state:
@@ -480,25 +743,19 @@ if "workflow" not in st.session_state:
 if "answers" not in st.session_state:
     st.session_state.answers = {}
 if "clause_store" not in st.session_state:
-    st.session_state.clause_store = {}   # will be synced per contract type
+    st.session_state.clause_store = {}
 if "custom_clauses" not in st.session_state:
-    st.session_state.custom_clauses = []  # list of {"title":..., "text":..., "approved": True/False}
+    st.session_state.custom_clauses = []  # {"title","text"}
 if "parties" not in st.session_state:
     st.session_state.parties = []
-if "annexure_note" not in st.session_state:
-    st.session_state.annexure_note = ""
-if "annexure_file" not in st.session_state:
-    st.session_state.annexure_file = None
+if "annexures" not in st.session_state:
+    st.session_state.annexures = []  # List of dicts: {"title", "note", "mode", "excel_data", "word_data"}
 if "prev_contract_type" not in st.session_state:
     st.session_state.prev_contract_type = None
-    
-# ✅ add these two flags here
-if "clear_custom_quill" not in st.session_state:
-    st.session_state.clear_custom_quill = False
-if "clear_cc_title" not in st.session_state:
-    st.session_state.clear_cc_title = False
+if "last_contract_type" not in st.session_state:
+    st.session_state.last_contract_type = ""
 
-# ------------- selectors -------------
+# selectors
 entity = st.selectbox("Entity", ["", "RPSG Ventures", "PCBL", "Spencers Retail", "AquaPharm", "Nature's Basket"])
 contract_type = st.selectbox(
     "Contract Type",
@@ -509,51 +766,29 @@ contract_type = st.selectbox(
     index=0
 )
 
-# --- Reset state when the contract type changes ---
-if "last_contract_type" not in st.session_state:
-    st.session_state.last_contract_type = contract_type
-
-if contract_type != st.session_state.last_contract_type:
-    # Reset clause store depending on contract type
-    if contract_type == "NDA":
-        st.session_state.clause_store = {i: {"text": CLAUSES_NDA[i], "approved": False} for i in CLAUSES_NDA}
-    elif contract_type == "PURCHASE AGREEMENT":
-        try:
-            st.session_state.clause_store = {i: {"text": CLAUSES_PA[i], "approved": False} for i in CLAUSES_PA}
-        except Exception:
-            st.session_state.clause_store = {}
-    else:
-        st.session_state.clause_store = {}
-
-    # Always clear custom clauses & parties when switching contract type
-    st.session_state.custom_clauses = []
-    st.session_state.parties = []
-
-    st.session_state.last_contract_type = contract_type
-
-# --- Sync clause store whenever type changes (kept, harmless) ---
+# Reset/Sync on contract type change
 def sync_clause_store():
     if contract_type == "NDA":
-        st.session_state.clause_store = {i: {"text": CLAUSES_NDA[i], "approved": False} for i in CLAUSES_NDA}
+        st.session_state.clause_store = {i: CLAUSES_NDA[i] for i in CLAUSES_NDA}
         st.session_state.custom_clauses = []
     elif contract_type == "PURCHASE AGREEMENT":
-        st.session_state.clause_store = {i: {"text": CLAUSES_PA[i], "approved": False} for i in CLAUSES_PA}
-    elif contract_type:
-        st.session_state.clause_store = {}
+        st.session_state.clause_store = {i: CLAUSES_PA[i] for i in CLAUSES_PA}
     else:
         st.session_state.clause_store = {}
         st.session_state.custom_clauses = []
 
-if st.session_state.prev_contract_type != contract_type:
+if contract_type != st.session_state.last_contract_type:
     sync_clause_store()
-    st.session_state.prev_contract_type = contract_type
+    st.session_state.parties = []
+    st.session_state.annexures = [] # Reset annexures
+    st.session_state.last_contract_type = contract_type
 
 st.markdown("---")
 
-# ================ STEP 1: FORM UI ================
+# ================ STEP 1: FORM UI (collect inputs) ================
 if st.session_state.workflow == "form":
     if contract_type == "NDA":
-        st.subheader("NDA – Collect 10 Inputs")
+        st.subheader("NDA – Collect Inputs")
         fields = [
             ("DAY", "Signing day (e.g., 21)"),
             ("MONTH", "Signing month (e.g., August)"),
@@ -598,273 +833,230 @@ if st.session_state.workflow == "form":
 
     else:
         if contract_type:
-            st.info("Proceed to the Clauses step to add your own clauses for this agreement.")
+            st.info("Proceed to Clauses to add your own sections.")
         else:
             st.info("Select an Entity and a Contract Type to begin.")
 
     left, right = st.columns([1, 1])
-    if left.button("Save & Go to Clauses ➡️", use_container_width=True, key="to_clauses_btn"):
+    if left.button("Save & Go to Clauses ➡️", use_container_width=True):
         st.session_state.workflow = "clauses"
         st.rerun()
-    right.button("Reset Form", on_click=lambda: st.session_state.answers.clear(), use_container_width=True, key="reset_form_btn")
+    right.button("Reset Form", on_click=lambda: st.session_state.answers.clear(), use_container_width=True)
 
-# --- Quick actions for NDA on the form page ---
-if st.session_state.workflow == "form" and contract_type == "NDA":
-    all_filled = all(st.session_state.answers.get(k, "").strip() for k in
-        ["DAY","MONTH","RPSG_CIN_No","Vendor_Name","Vendor_CIN_No","Vendor_Office","RPSG_Email","Vendor_SPOC","Vendor_Email","RPSG_SPOC"]
-    )
-
-    st.markdown("### Quick actions (NDA)")
-    col_q1, col_q2, col_q3 = st.columns(3)
-
-    data = {k: st.session_state.answers.get(k, "") for k in
-            ["DAY","MONTH","RPSG_CIN_No","Vendor_Name","Vendor_CIN_No","Vendor_Office","RPSG_Email","Vendor_SPOC","Vendor_Email","RPSG_SPOC"]}
-    preamble = NDA_TEMPLATE.format(**data)
-
-    store = st.session_state.clause_store or {}
-    approved = [store[i]["text"] for i in sorted(store) if store[i]["approved"]] if store else []
-    if not approved:
-        approved = [store[i]["text"] for i in sorted(store)] if store else []
-
-    quick_preview_text = compose_full_contract(
-        preamble=preamble,
-        clause_texts=approved,
-        parties=st.session_state.parties,
-        annexure_note=""
-    )
-
-    if col_q1.button("👁️ Preview now", key="qa_preview_btn", disabled=not all_filled, use_container_width=True):
-        st.markdown("#### Preview")
-        st.markdown(quick_preview_text.replace("\n", "<br>"), unsafe_allow_html=True)
-
-    docx_file_quick = build_docx(
-        preamble=preamble,
-        clause_texts=approved,
-        parties=st.session_state.parties,
-        annexure_note="",
-        title="NON-DISCLOSURE AGREEMENT"
-    )
-
-    col_q2.download_button(
-        "📥 Download (.docx)",
-        data=docx_file_quick,
-        file_name="NDA_Final.docx",
-        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        disabled=not all_filled,
-        use_container_width=True,
-        key="qa_download_btn"
-    )
-
-    if col_q3.button("✅ Submit", key="qa_submit_btn", disabled=not all_filled, use_container_width=True):
-        st.success("Submitted! (You can wire this to email or your DMS.)")
-
-# =======================
-# STEP 2: CLAUSE MANAGER
-# =======================
+# ======================= STEP 2: SECTIONED CLAUSE EDITOR =======================
 elif st.session_state.workflow == "clauses":
-    st.subheader("Clauses – Edit / Rephrase / Approve")
-    st.caption("For NDA/Purchase: edit standard clauses and add custom ones. For other types: add custom clauses only.")
+    st.subheader("Sections – Edit & Save")
+    st.caption("Each section has a rich editor. Use lists and sub-lists; they’ll export as numbered/bulleted items with indentation.")
 
-    is_std = contract_type in ("NDA", "PURCHASE AGREEMENT")
+    # Standard sections first (NDA/PA)
+    if contract_type in ("NDA", "PURCHASE AGREEMENT") and st.session_state.clause_store:
+        st.markdown("### Standard Sections")
+        for key in sorted(st.session_state.clause_store.keys()):
+            with st.expander(f"Section: {extract_title_from_clause(st.session_state.clause_store[key])}", expanded=False):
+                current = st.session_state.clause_store[key]
+                edited = st_quill(value=current, placeholder="Edit section text…", key=f"std_sec_{key}")
+                c1, c2 = st.columns([1,1])
+                if c1.button("💾 Save", key=f"save_std_{key}", use_container_width=True):
+                    if edited is not None:
+                        st.session_state.clause_store[key] = edited
+                        st.success("Saved.")
+                if c2.button("↩️ Reset to library", key=f"reset_std_{key}", use_container_width=True):
+                    # reload from library
+                    if contract_type == "NDA":
+                        st.session_state.clause_store[key] = CLAUSES_NDA[key]
+                    else:
+                        st.session_state.clause_store[key] = CLAUSES_PA[key]
+                    st.info("Reset.")
 
-    # ---------- STANDARD CLAUSES (only NDA / PA) ----------
-    if is_std and st.session_state.clause_store:
-        selected_keys = sorted(st.session_state.clause_store.keys())
-        selected = st.selectbox("Standard clause (pick to edit)", selected_keys, key="clause_select")
-        display = st.session_state.clause_store[selected]["text"]
+    # Custom sections for all types
+    st.markdown("### ➕ Add Custom Section")
+    cc_title = st.text_input("Section Title", key="cc_title")
+    cc_body = st_quill(value="", placeholder="Write your custom section…", key="cc_body")
+    add_col1, add_col2 = st.columns([1,1])
+    if add_col1.button("➕ Add Section", use_container_width=True):
+        if cc_title.strip() and cc_body and cc_body.strip():
+            st.session_state.custom_clauses.append({"title": cc_title.strip(), "text": cc_body})
+            st.success("Custom section added.")
+    if add_col2.button("🧹 Clear", use_container_width=True):
+        st.session_state.cc_title = ""
+        st.session_state.cc_body = ""
 
-        edited = st_quill(
-            value=display,
-            placeholder="Edit clause text here...",
-            key=f"clause_quill_{selected}",
-        )
-
-        c1, c2 = st.columns(2)
-        if c1.button("Save Edit", key=f"save_edit_{selected}"):
-            if edited is not None:
-                st.session_state.clause_store[selected]["text"] = edited
-                st.success("Saved.")
-
-        st.session_state.clause_store[selected]["approved"] = st.checkbox(
-            "Approved",
-            value=st.session_state.clause_store[selected]["approved"],
-            key=f"approved_{selected}",
-        )
-
-        st.markdown("---")
-
-    # ---------- CUSTOM CLAUSES (ALL CONTRACT TYPES) ----------
-    st.markdown("### ➕ Add Custom Clause")
-
-    # Use a contract-type-specific key for the Quill box
-    custom_quill_key = f"custom_quill_{contract_type or 'general'}"
-
-    # If the previous click asked us to clear the widgets, do it BEFORE creating them
-    if st.session_state.clear_custom_quill:
-        st.session_state.pop(custom_quill_key, None)
-        st.session_state.clear_custom_quill = False
-
-    if st.session_state.clear_cc_title:
-        st.session_state.pop("cc_title", None)
-        st.session_state.clear_cc_title = False
-
-    # Now safely create the widgets
-    cc_title = st.text_input("Custom Clause Title", key="cc_title")
-
-    cc_body_html = st_quill(
-        value=st.session_state.get(custom_quill_key, ""),
-        placeholder="Write your custom clause here…",
-        key=custom_quill_key,
-    )
-
-
-    add_col1, add_col2 = st.columns([1, 1])
-    if add_col1.button("➕ Add Custom Clause", key="add_custom_clause_btn"):
-        if cc_title.strip() and cc_body_html and cc_body_html.strip():
-            st.session_state.custom_clauses.append(
-                {"title": cc_title.strip(), "text": cc_body_html, "approved": True}
-            )
-            # Set flags so next run clears the widgets BEFORE they are created
-            st.session_state.clear_custom_quill = True
-            st.session_state.clear_cc_title = True
-            st.rerun()
-
-
-    # Show the custom clauses list
     if st.session_state.custom_clauses:
-        st.markdown("#### Added Custom Clauses")
+        st.markdown("#### Custom Sections")
         for idx, c in enumerate(st.session_state.custom_clauses, 1):
-            with st.expander(f"{idx}. {c.get('title','Custom Clause')}", expanded=False):
-                # Render with HTML so Quill formatting shows in the app
-                st.markdown(c.get("text",""), unsafe_allow_html=True)
-                # Toggle approved if needed
-                c["approved"] = st.checkbox(
-                    f"Approved – {c.get('title','Custom Clause')}",
-                    value=c.get("approved", True),
-                    key=f"cc_approved_{idx}",
-                )
-                # Remove button
-                if st.button(f"❌ Remove", key=f"remove_cc_{idx}"):
-                    st.session_state.custom_clauses.pop(idx - 1)
+            with st.expander(f"{idx}. {c.get('title','Custom Section')}", expanded=False):
+                new_title = st.text_input("Title", value=c.get("title",""), key=f"cst_t_{idx}")
+                new_body = st_quill(value=c.get("text",""), key=f"cst_b_{idx}")
+                c1, c2 = st.columns([1,1])
+                if c1.button("💾 Save", key=f"save_cst_{idx}", use_container_width=True):
+                    c["title"] = new_title
+                    c["text"] = new_body
+                    st.success("Saved.")
+                if c2.button("❌ Remove", key=f"rm_cst_{idx}", use_container_width=True):
+                    st.session_state.custom_clauses.pop(idx-1)
                     st.rerun()
 
+    # Parties
     st.markdown("---")
-
-    # ---------- PARTIES (ALL CONTRACT TYPES) ----------
     st.markdown("### 👥 Parties")
     new_party = st.text_input("Add Party (Name, Role, Address/email optional)", key="party_input")
     cpa, cpb = st.columns(2)
-    if cpa.button("Add Party", key="add_party_btn"):
+    if cpa.button("Add Party"):
         if new_party.strip():
             st.session_state.parties.append(new_party.strip())
-    if cpb.button("Clear Parties", key="clear_parties_btn"):
+    if cpb.button("Clear Parties"):
         st.session_state.parties = []
     if st.session_state.parties:
         st.write("- " + "\n- ".join(st.session_state.parties))
 
     st.markdown("---")
-
-    # ---------- NAV ----------
-    nav1, nav2 = st.columns([1, 1])
-    if nav1.button("⬅️ Back to Form", key="clauses_back_form"):
+    nav1, nav2 = st.columns([1,1])
+    if nav1.button("⬅️ Back to Form"):
         st.session_state.workflow = "form"
         st.rerun()
-
-    next_label = "Save & Go to Preview ➡️" if contract_type == "NDA" else "Save & Go to Annexure ➡️"
-    if nav2.button(next_label, key="clauses_next_btn"):
-        st.session_state.workflow = "preview" if contract_type == "NDA" else "annexure"
+    if nav2.button("Save & Go to Annexure ➡️"):
+        #st.session_state.workflow = "annexure" if contract_type != "NDA" else "preview"
+        st.session_state.workflow = "annexure"
+        #so now annexure functionality will also be there for NDA.
         st.rerun()
 
-# ========================= STEP 3: ANNEXURE (Excel) =========================
+# ========================= STEP 3: ANNEXURE (Excel + Word modes) =========================
 elif st.session_state.workflow == "annexure":
-    if contract_type == "NDA":
-        st.session_state.annexure_file = None
-        st.session_state.annexure_note = ""
-        st.session_state.workflow = "preview"
+    st.subheader("Annexures")
+    st.caption("Add, remove, and edit all annexures for the agreement. Each can be an Excel or Word-style table.")
+
+    if st.button("➕ Add New Annexure", use_container_width=True):
+        new_annex_num = len(st.session_state.annexures) + 1
+        annex_letter = chr(ord('A') + new_annex_num - 1)
+        st.session_state.annexures.append({
+            "title": f"Annexure {annex_letter}",
+            "note": "",
+            "mode": "Word Table Mode",
+            "excel_data": None,
+            "word_data": [["S.No", "Item/Deliverable", "Description", "Qty", "Unit Price", "Total", "Remarks"]]
+        })
         st.rerun()
 
-    st.subheader("Annexure (Excel)")
-    st.caption("Upload an Excel annexure (pricing, scope, deliverables) or download a blank template.")
+    st.markdown("---")
 
-    file = st.file_uploader("Upload Annexure (.xlsx)", type=["xlsx"], key="annexure_uploader")
-    if file:
-        st.session_state.annexure_file = file
-        if not st.session_state.get("annexure_note"):
-            st.session_state.annexure_note = f"Annexure attached: {file.name}"
-        st.success(f"Uploaded: {file.name}")
+    # Loop through and display editors for each annexure
+    for i, annex in enumerate(st.session_state.annexures):
+        with st.expander(f"**{annex.get('title', f'Annexure {i+1}')}**", expanded=True):
+            # Edit title
+            new_title = st.text_input("Annexure Title", value=annex["title"], key=f"title_{i}")
+            st.session_state.annexures[i]["title"] = new_title
 
-    c1, c2 = st.columns(2)
+            # Edit mode
+            mode = st.radio(
+                "Editing Mode",
+                ["Excel Mode", "Word Table Mode"],
+                index=0 if annex["mode"] == "Excel Mode" else 1,
+                key=f"mode_{i}",
+                horizontal=True
+            )
+            st.session_state.annexures[i]["mode"] = mode
 
-    if c1.button("Clear Upload", key="annexure_clear_btn"):
-        st.session_state.annexure_file = None
-        st.info("Annexure upload cleared.")
-    no_annexure = c2.checkbox("No annexure for this contract", value=False, key="no_annexure_chk")
+            # Excel Mode UI
+            if mode == "Excel Mode":
+                file = st.file_uploader("Upload Annexure (.xlsx)", type=["xlsx"], key=f"uploader_{i}")
+                if file:
+                    st.session_state.annexures[i]["excel_data"] = BytesIO(file.getvalue())
+                    st.success(f"Uploaded: {file.name} for {annex['title']}")
 
-    if contract_type == "PURCHASE AGREEMENT":
-        template = default_purchase_annexure_template()
-    else:
-        template = default_annexure_template()
-    st.download_button(
-        label="Download Blank Annexure Template (.xlsx)",
-        data=template,
-        file_name="Annexure_Template.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        use_container_width=True,
-        key="annexure_template_dl"
-    )
+                st.markdown("**Inline Editor (optional)**")
+                raw_df = None
+                if st.session_state.annexures[i]["excel_data"]:
+                    try:
+                        st.session_state.annexures[i]["excel_data"].seek(0)
+                        raw_df = pd.read_excel(st.session_state.annexures[i]["excel_data"])
+                    except Exception as e:
+                        st.error(f"Could not read the uploaded Excel file. Please re-upload. Error: {e}")
 
-    # Inline editor only for Purchase Agreement
-    if contract_type == "PURCHASE AGREEMENT" and not no_annexure:
-        st.markdown("### ✏️ Edit Annexure Inline")
-        if st.session_state.annexure_file:
-            raw_df = pd.read_excel(st.session_state.annexure_file)
-        else:
-            raw_df = pd.read_excel(r"Purchase_Agreement_Annexure_Fromat_Excel.xlsx")
+                if raw_df is None:
+                    raw_df = pd.DataFrame(columns=["S.No","Item/Deliverable","Description","Quantity","Unit Price","Total","Remarks"])
 
-        display_df = df_for_display(raw_df)
-        edited_df = st.data_editor(
-            display_df,
-            num_rows="dynamic",
-            use_container_width=True,
-            key="annexure_editor"
-        )
+                # Ensure all cells are editable as strings
+                raw_df = raw_df.astype(str).replace("nan", "")
 
-        col1, col2 = st.columns(2)
-        if col1.button("💾 Save Edits", key="save_annexure_edits_btn"):
-            numeric_cols = ["Quantity", "Unit Price", "Total", "% of Turnover", "Amount per store (Rs)",
-                            "Amount per month (Rs)", "Amount per Vendor (Rs)", "Amount per New Store Launch (Rs)",
-                            "Amount per  Store  (Rs)", "Rs"]
-            cleaned_to_save = df_for_save(edited_df, numeric_cols=numeric_cols)
+                edited_df = st.data_editor(
+                    raw_df,
+                    num_rows="dynamic",
+                    use_container_width=True,
+                    key=f"editor_{i}"
+                )
 
-            out = BytesIO()
-            with pd.ExcelWriter(out, engine="xlsxwriter") as writer:
-                cleaned_to_save.to_excel(writer, index=False, sheet_name="Annexure")
-            out.seek(0)
-            st.session_state.annexure_file = out
-            st.success("Edits saved! Download & DOCX will include your changes (with blanks kept blank).")
+                c1, c2 = st.columns(2)
+                if c1.button("💾 Save Edits to Excel Buffer", key=f"save_excel_{i}"):
+                    out = BytesIO()
+                    with pd.ExcelWriter(out, engine="xlsxwriter") as writer:
+                        edited_df.replace("", pd.NA).to_excel(writer, index=False, sheet_name=annex.get("title", f"Annexure_{i+1}"))
+                    out.seek(0)
+                    st.session_state.annexures[i]["excel_data"] = out
+                    st.success(f"Excel data for {annex['title']} saved.")
+                if c2.button("🧹 Clear Excel Data", key=f"clear_excel_{i}"):
+                    st.session_state.annexures[i]["excel_data"] = None
+                    st.info(f"Cleared Excel data for {annex['title']}.")
 
-        if col2.button("↩️ Reset Editor", key="reset_annexure_edits_btn"):
-            st.session_state.annexure_file = None
-            st.info("Editor reset. Please upload again or use default template.")
+           # Word Table Mode UI
+            else:
+                st.markdown("**Edit Word-style Annexure Table**")
+                data = st.session_state.annexures[i]["word_data"]
 
-    st.text_area(
-        "Annexure Note (appears in contract)",
-        value=st.session_state.annexure_note,
-        key="annexure_note_box",
-        height=120
-    )
-    st.session_state.annexure_note = st.session_state.annexure_note_box
+                import pandas as pd
+                df = pd.DataFrame(data)
+
+                # If table is empty, initialize with 2 columns
+                if df.empty:
+                    df = pd.DataFrame([["", ""]], columns=["Column 1", "Column 2"])
+
+                edited_df = st.data_editor(
+                    df,
+                    num_rows="dynamic",   # allows adding/removing rows
+                    use_container_width=True,
+                    hide_index=True,
+                    key=f"annex_table_{i}_{id(annex)}"
+                )
+
+                # --- Column Controls ---
+                col_ctrls = st.columns(2)
+                if col_ctrls[0].button("➕ Add Column", key=f"addcol_{i}_{id(annex)}"):
+                    new_col_name = f"Column {len(edited_df.columns) + 1}"
+                    edited_df[new_col_name] = ""   # add new empty column
+                    st.session_state.annexures[i]["word_data"] = edited_df.values.tolist()
+                    st.rerun()
+
+                if col_ctrls[1].button("❌ Delete Last Column", key=f"delcol_{i}_{id(annex)}"):
+                    if len(edited_df.columns) > 1:   # keep at least one column
+                        edited_df = edited_df.iloc[:, :-1]  # drop last column
+                        st.session_state.annexures[i]["word_data"] = edited_df.values.tolist()
+                        st.rerun()
+
+                # Save back to session state (list of lists)
+                st.session_state.annexures[i]["word_data"] = edited_df.values.tolist()
+
+            # Annexure Note
+            note = st.text_area(
+                "Annexure Note (appears above the table in the contract)",
+                value=annex["note"],
+                key=f"note_box_{i}_{id(annex)}",
+                height=100
+            )
+            st.session_state.annexures[i]["note"] = note
+
+            # Remove annexure button
+            if st.button(f"🗑️ Remove {annex['title']}", key=f"remove_annex_{i}_{id(annex)}"):
+                st.session_state.annexures.pop(i)
+                st.rerun()
+
+            st.markdown("---")
+
+
 
     nav1, nav2 = st.columns([1, 1])
-    if nav1.button("⬅️ Back to Clauses", key="annexure_back_clauses"):
+    if nav1.button("⬅️ Back to Sections"):
         st.session_state.workflow = "clauses"
         st.rerun()
-
-    can_proceed = bool(st.session_state.annexure_file) or no_annexure
-    if nav2.button("Save & Go to Preview ➡️", key="annexure_next_btn", disabled=not can_proceed):
-        if no_annexure:
-            st.session_state.annexure_file = None
-            st.session_state.annexure_note = ""
+    if nav2.button("Save & Go to Preview ➡️"):
         st.session_state.workflow = "preview"
         st.rerun()
 
@@ -872,101 +1064,148 @@ elif st.session_state.workflow == "annexure":
 elif st.session_state.workflow == "preview":
     st.subheader("Preview, Download, Submit")
 
-    # Build preamble...
+    # Build preamble with the current answers
+    #highlight_terms = [v for v in st.session_state.answers.values() if isinstance(v, str) and v.strip()]
+     
+     # Build placeholder mapping only for defined placeholders
+    if contract_type == "NDA":
+        placeholder_mapping = {
+            "DAY": st.session_state.answers.get("DAY", ""),
+            "MONTH": st.session_state.answers.get("MONTH", ""),
+            "RPSG_CIN_No": st.session_state.answers.get("RPSG_CIN_No", ""),
+            "Vendor_Name": st.session_state.answers.get("Vendor_Name", ""),
+            "Vendor_CIN_No": st.session_state.answers.get("Vendor_CIN_No", ""),
+            "Vendor_Office": st.session_state.answers.get("Vendor_Office", ""),
+            "RPSG_Email": st.session_state.answers.get("RPSG_Email", ""),
+            "Vendor_SPOC": st.session_state.answers.get("Vendor_SPOC", ""),
+            "Vendor_Email": st.session_state.answers.get("Vendor_Email", ""),
+            "RPSG_SPOC": st.session_state.answers.get("RPSG_SPOC", "")
+        }
+    elif contract_type == "PURCHASE AGREEMENT":
+        placeholder_mapping = {
+            key: st.session_state.answers.get(key, "")
+            for key in st.session_state.answers.keys()
+        }
+    else:
+        placeholder_mapping = {}
+
     if contract_type == "NDA":
         data = {k: st.session_state.answers.get(k, "") for k in [
             "DAY","MONTH","RPSG_CIN_No","Vendor_Name","Vendor_CIN_No","Vendor_Office",
             "RPSG_Email","Vendor_SPOC","Vendor_Email","RPSG_SPOC"
         ]}
-        preamble = NDA_TEMPLATE.format(**data)
+        preamble_html = NDA_TEMPLATE.format(**data)
         title = "NON-DISCLOSURE AGREEMENT"
-
     elif contract_type == "PURCHASE AGREEMENT":
-        data = {k: st.session_state.answers.get(k, "") for k in [
-            "Effective_Date","Company_Representative","Vendor_Name","Vendor_PAN",
-            "Vendor_FatherSpouse","Vendor_Age","Vendor_Address","Vendor_Business"
-        ]}
-        preamble = PURCHASE_TEMPLATE.format(**data)
+        data = {k: st.session_state.answers.get(k, "") for k in st.session_state.answers.keys()}
+        preamble_html = PURCHASE_TEMPLATE
         title = "PURCHASE AGREEMENT"
-
     else:
-        preamble = f"{contract_type} between parties."
-        title = contract_type
+        preamble_html = f"<p>{contract_type} between parties.</p>"
+        title = contract_type or "AGREEMENT"
 
-    only_approved = st.checkbox("Show only approved clauses", value=False, key="preview_only_approved")
-
-    # --- STANDARD (NDA/PA only) ---
-    standard_clauses = []
+    # Build a unified list of sections for preview (standard + custom)
+    std_sections = []
     if contract_type in ("NDA", "PURCHASE AGREEMENT"):
-        store = st.session_state.clause_store or {}
-        if only_approved:
-            standard_clauses = [store[i]["text"] for i in sorted(store) if store[i]["approved"]]
-            if not standard_clauses:
-                st.info("No clauses approved yet; showing all clauses instead.")
-                standard_clauses = [store[i]["text"] for i in sorted(store)]
-        else:
-            standard_clauses = [store[i]["text"] for i in sorted(store)]
+        for k in sorted(st.session_state.clause_store.keys()):
+            std_sections.append((k, extract_title_from_clause(st.session_state.clause_store[k]), st.session_state.clause_store[k]))
 
-    # --- CUSTOM (all) ---
-    custom_clauses = [
-        f"{c.get('title','Custom Clause')}\n{c.get('text','')}"
-        for c in st.session_state.custom_clauses
-        if c.get("approved", True)
-    ]
-
-    # --- MERGE ---
-    if contract_type in ("NDA", "PURCHASE AGREEMENT"):
-        clause_list = standard_clauses + custom_clauses
-    else:
-        clause_list = custom_clauses
-
-    annexure_text = "" if contract_type == "NDA" else st.session_state.annexure_note
-
-    preview_text = compose_full_contract(
-        preamble=preamble,
-        clause_texts=clause_list,
-        parties=st.session_state.parties,      # parties always included
-        annexure_note=annexure_text,
-    )
+    start_num = len(std_sections) + 1
+    custom_sections = [(start_num + idx - 1, c.get("title","Custom"), c.get("text","")) 
+                    for idx, c in enumerate(st.session_state.custom_clauses, 1)]
+    
+    # def highlight_html(text, terms):
+    #     if not text or not terms:
+    #         return text or ""
+    #     rx = _regex_parts_for_terms(terms)
+    #     def repl(m):
+    #         return f"<u><mark>{m.group(0)}</mark></u>"
+    #     return rx.sub(repl, text)
 
     st.markdown("### 📑 Preview")
-    # Render as HTML so Quill formatting (in custom clauses) shows nicely
-    st.markdown(preview_text, unsafe_allow_html=True)
+    st.markdown(f"<h3 style='text-align:center'>{title}</h3>", unsafe_allow_html=True)
 
-    if contract_type != "NDA" and st.session_state.annexure_file:
-        st.markdown("### 📎 Annexure (Preview)")
-        annexure_df = pd.read_excel(st.session_state.annexure_file)
-        st.dataframe(df_for_display(annexure_df), use_container_width=True)
+    #st.markdown(highlight_html(preamble_html, highlight_terms), unsafe_allow_html=True)
+    st.markdown(highlight_placeholders(preamble_html, placeholder_mapping), unsafe_allow_html=True)
 
+    st.markdown("<hr/>", unsafe_allow_html=True)
+
+    if std_sections:
+        st.markdown("**Sections**", unsafe_allow_html=True)
+        for k, t, body in std_sections:
+            st.markdown(f"**{t}**", unsafe_allow_html=True)
+            st.markdown(highlight_placeholders(body, placeholder_mapping), unsafe_allow_html=True)
+            st.markdown("<br/>", unsafe_allow_html=True)
+
+    if custom_sections:
+        st.markdown("**Custom Sections**")
+        for num, t, body in custom_sections:
+            st.markdown(f"**{num}. {t}**", unsafe_allow_html=True)
+            st.markdown(highlight_placeholders(body, placeholder_mapping), unsafe_allow_html=True)
+            st.markdown("<br/>", unsafe_allow_html=True)
+
+    if st.session_state.parties:
+        st.markdown("**PARTIES**")
+        st.markdown("<ul>" + "".join([f"<li>{highlight_placeholders(p, placeholder_mapping)}</li>" for p in st.session_state.parties]) + "</ul>", unsafe_allow_html=True)
+
+    #if contract_type != "NDA" and st.session_state.annexures:
+    if st.session_state.annexures:
+    #so now annexure functionality will also be there for NDA.
+        st.markdown("### Annexures")
+        for annex in st.session_state.annexures:
+            st.markdown(f"#### {annex.get('title', 'Annexure')}")
+            if annex.get("note"):
+                st.markdown(highlight_placeholders(annex["note"], placeholder_mapping), unsafe_allow_html=True)
+
+            if annex.get("excel_data"):
+                st.markdown(f"**Data Table (from Excel)**")
+                try:
+                    annex.get("excel_data").seek(0)
+                    annex_df = pd.read_excel(annex["excel_data"])
+                    st.dataframe(annex_df, use_container_width=True)
+                except Exception as e:
+                    st.warning(f"Could not read Excel annexure '{annex.get('title')}': {e}")
+            
+            word_data = annex.get("word_data", [])
+            if word_data and len(word_data) > 0:
+                st.markdown(f"**Data Table (from Word-style Table)**")
+                header = word_data[0] if word_data else []
+                body = word_data[1:] if len(word_data) > 1 else []
+                render_table(header, body)
+
+
+    # Downloads
     c1, c2, c3 = st.columns(3)
     with c1:
         docx_file = build_docx(
-            preamble=preamble,
-            clause_texts=clause_list,
-            parties=st.session_state.parties,   # parties in the DOCX too
-            annexure_note=annexure_text,
+            preamble_html=preamble_html,
+            clauses_dict={k: v for k, v in st.session_state.clause_store.items()},
+            custom_clauses=st.session_state.custom_clauses,
+            parties=st.session_state.parties,
+            #annexures=st.session_state.annexures if contract_type != "NDA" else [],
+            annexures=st.session_state.annexures, #so now annexure functionality will also be there for NDA.
             title=title,
-            annexure_file=st.session_state.annexure_file
+            highlight_terms=None
+            #So now no highlighting will happen in the docx. It will only be there in the preview. 
         )
         st.download_button(
             label="📥 Download (.docx)",
             data=docx_file,
             file_name=f"{title.replace(' ', '_')}.docx",
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            use_container_width=True,
-            key="preview_download_btn"
+            use_container_width=True
         )
     with c2:
-        if st.button("👁️ Refresh Preview", key="preview_refresh_btn", use_container_width=True):
+        if st.button("👁️ Refresh Preview", use_container_width=True):
             st.rerun()
     with c3:
-        if st.button("✅ Submit", key="preview_submit_btn", use_container_width=True):
-            st.success("Submitted! (Wire this button to your DMS/email as needed.)")
+        if st.button("✅ Submit", use_container_width=True):
+            st.success("Submitted! (Wire this to email/DMS as needed.)")
 
     b1, b2 = st.columns(2)
-    if b1.button("⬅️ Back to Clauses", key="preview_back_clauses"):
+    if b1.button("⬅️ Back to Sections"):
         st.session_state.workflow = "clauses"
         st.rerun()
-    if contract_type != "NDA" and b2.button("⬅️ Back to Annexure", key="preview_back_annexure"):
+    if contract_type != "NDA" and b2.button("⬅️ Back to Annexure"):
         st.session_state.workflow = "annexure"
         st.rerun()
